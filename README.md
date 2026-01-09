@@ -42,7 +42,7 @@ Step 8: Open Terminal, go into the cloned repository and run `cd Software/backen
 Step 9 : run `python -m uvicorn main:app --reload --port 8000`.
 
 You should see something like...
-
+```
 INFO: Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
 
 INFO: Started reloader process [16136] using StatReload
@@ -54,14 +54,14 @@ INFO: Waiting for application startup.
 ✅ AI Model Trained on Normal Baseline
 
 INFO: Application startup complete.
-
+```
 
 Step 10: Open another Terminal, go into the cloned repository and run `cd Software/backend/node-server`.
 
 Step 11 : run `node index.js`.
 
 You should see something like...
-
+```
 🚀 Server + API running on 3000
 
 Frontend Dashboard Connected: **_...
@@ -69,14 +69,14 @@ Frontend Dashboard Connected: **_...
 ✅ Connected to MQTT Broker
 
 Frontend Dashboard Connected: _**...
-
+```
 
 Step 12 : Open another Terminal, go into the cloned repository and run `cd Software/frontend`.
 
 Step 13: run `npm run dev`.
 
 You should see something like...
-
+```
 VITE v7.3.1 ready in 648 ms
 
 
@@ -85,7 +85,7 @@ VITE v7.3.1 ready in 648 ms
 ➜ Network: use --host to expose
 
 ➜ press h + enter to show help
-
+```
 
 ## Status
 
