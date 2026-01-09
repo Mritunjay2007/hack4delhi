@@ -1,0 +1,14 @@
+# Node
+node_modules/
+.env
+
+# Python
+__pycache__/
+venv/
+
+# Arduino
+*.bin
+*.elf
+
+# OS
+.DS_Store

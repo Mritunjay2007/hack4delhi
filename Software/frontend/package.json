@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "leaflet": "^1.9.4",
+    "react-leaflet": "^5.0.0",
+    "recharts": "^3.6.0",
+    "socket.io-client": "^4.8.3"
+  }
+}
