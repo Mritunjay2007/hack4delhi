@@ -21,6 +21,7 @@ ESP32 → MQTT → Node.js → Python AI → Node.js → React Dashboard
 ## How to use it
 
 Step 1: Fork the reporsitory.
+
 Step 2: Clone the reposiroty.
 Step 3: Open terminal and go into `Software/frontend`.
 Step 4: run `npm install` in your terminal.
@@ -33,29 +34,29 @@ After succesfully installing all the dependencies, Run the WebApp by following t
 Step 8: Open Terminal, go into the cloned repository and run `cd Software/backend/node-server/ai-server`.
 Step 9 : run `python -m uvicorn main:app --reload --port 8000`
 You should see something like...
-INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
-INFO:     Started reloader process [16136] using StatReload
-INFO:     Started server process [31240]
-INFO:     Waiting for application startup.
+INFO: Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO: Started reloader process [16136] using StatReload
+INFO: Started server process [31240]
+INFO: Waiting for application startup.
 ✅ AI Model Trained on Normal Baseline
-INFO:     Application startup complete.
+INFO: Application startup complete.
 
 Step 10: Open another Terminal, go into the cloned repository and run `cd Software/backend/node-server`.
 Step 11 : run `node index.js`
 You should see something like...
 🚀 Server + API running on 3000
-Frontend Dashboard Connected: ***...
+Frontend Dashboard Connected: **_...
 ✅ Connected to MQTT Broker
-Frontend Dashboard Connected: ***...
+Frontend Dashboard Connected: _**...
 
 Step 12 : Open another Terminal, go into the cloned repository and run `cd Software/frontend`
 Step 13: run `npm run dev`
 You should see something like...
-VITE v7.3.1  ready in 648 ms
+VITE v7.3.1 ready in 648 ms
 
-  ➜  Local:   http://localhost:5173/
-  ➜  Network: use --host to expose
-  ➜  press h + enter to show help
+➜ Local: http://localhost:5173/
+➜ Network: use --host to expose
+➜ press h + enter to show help
 
 ## Status
 
