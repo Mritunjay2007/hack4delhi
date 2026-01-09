@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import L from "leaflet";
 import io from "socket.io-client";
+import axios from "axios"; 
 import "leaflet/dist/leaflet.css";
 
 // --- ICONS ---
@@ -35,6 +36,7 @@ const icons = {
 };
 
 const socket = io("http://localhost:3000");
+const API_URL = "http://localhost:3000/api/alerts";
 
 export default function Dashboard() {
   const [nodes, setNodes] = useState({});
@@ -43,6 +45,8 @@ export default function Dashboard() {
   const [selectedNode, setSelectedNode] = useState(null);
 
   useEffect(() => {
+    fetchAlerts();
+
     socket.on("sensor_update", (data) => {
       setNodes((prev) => ({
         ...prev,
@@ -69,7 +73,7 @@ export default function Dashboard() {
             pressure: data.pressure,
           },
         ];
-        return newData.slice(-50);
+        return newData.slice(-50); 
       });
     });
 
@@ -84,11 +88,35 @@ export default function Dashboard() {
       }));
     });
 
+    socket.on("alert_update", (updatedAlert) => {
+      setAlerts((prev) =>
+        prev.map((a) => (a.id === updatedAlert.id ? updatedAlert : a))
+      );
+    });
+
     return () => {
       socket.off("sensor_update");
       socket.off("new_alert");
+      socket.off("alert_update");
     };
   }, []);
+
+  const fetchAlerts = async () => {
+    try {
+      const res = await axios.get(API_URL);
+      setAlerts(res.data);
+    } catch (err) {
+      console.error("Failed to fetch alerts", err);
+    }
+  };
+
+  const handleMarkConstruction = async (alertId) => {
+    try {
+      await axios.post(`${API_URL}/mark-construction`, { id: alertId });
+    } catch (err) {
+      alert("Failed to update status");
+    }
+  };
 
   const graphData = useMemo(() => {
     if (!selectedNode) return telemetry;
@@ -97,376 +125,312 @@ export default function Dashboard() {
 
   const latestEnv = graphData.length > 0 ? graphData[graphData.length - 1] : {};
 
-  // --- STRICT STYLES ---
+  // --- STYLES ---
   const styles = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    height: '100dvh',
-    width: '100%',
-    overflow: 'hidden',
-    fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif'
-  },
+    container: {
+      display: "flex",
+      flexDirection: "column",
+      height: "100vh",
+      width: "100%", // Changed to 100% to avoid scrollbar issues
+      overflow: "hidden",
+      fontFamily: "Segoe UI, Tahoma, Geneva, Verdana, sans-serif",
+      backgroundColor: "#f8fafc",
+    },
+    header: {
+      height: "50px",
+      backgroundColor: "#0f172a",
+      color: "white",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      padding: "0 20px",
+      flexShrink: 0,
+      zIndex: 50,
+    },
+    body: {
+      display: "flex",
+      flex: 1, 
+      height: "calc(100vh - 50px)",
+      overflow: "hidden",
+      width: "100%",
+    },
+    
+    // --- LEFT PANEL (Fixed Map) ---
+    leftPanel: {
+      flex: "0 0 35%", // Keeps map at exactly 35%
+      height: "100%",
+      position: "relative",
+      borderRight: "1px solid #e5e7eb",
+    },
 
-  header: {
-    height: '50px',
-    backgroundColor: '#0f172a',
-    color: 'white',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '0 20px',
-    flexShrink: 0
-  },
+    // --- RIGHT PANEL (Dynamic Fill) ---
+    rightPanel: {
+      flex: 1, // FIX: This forces it to fill ALL remaining space
+      display: "flex",
+      flexDirection: "column",
+      height: "100%",
+      backgroundColor: "#f8fafc",
+      overflowY: "auto",
+      minWidth: 0, // Prevents flex item from overflowing
+    },
 
- body: {
-  display: 'flex',
-  height: 'calc(100vh - 50px)', // header height
-  overflow: 'hidden',
-  minWidth: 0
-},
+    // --- ALERTS ---
+    alertSection: {
+      maxHeight: "400px", 
+      display: "flex",
+      flexDirection: "column",
+      backgroundColor: "white",
+      borderBottom: "1px solid #e5e7eb",
+    },
+    alertHeader: {
+      padding: "10px 15px",
+      borderBottom: "1px solid #eee",
+      fontWeight: "bold",
+      display: "flex",
+      justifyContent: "space-between",
+      background: "white",
+      position: "sticky",
+      top: 0,
+      zIndex: 10,
+    },
+    alertTableWrapper: {
+      overflow: "auto",
+      maxHeight: "350px", 
+    },
 
-
-  /* LEFT MAP */
-  leftPanel: {
-  flex: '0 0 50%',
-  height: '100%',
-  overflow: 'hidden',
-  borderRight: '1px solid #e5e7eb'
-},
-
-
-  /* RIGHT DATA PANEL */
-  rightPanel: {
-    flex: '0 0 50%',
-    display: 'flex',
-    flexDirection: 'column',
-    height: '100%',
-    backgroundColor: '#f8fafc',
-    minWidth: 0
-  },
-
-  /* ALERTS — TOP */
-  alertSection: {
-    flex: '0 0 35%',
-    overflowY: 'auto',
-    backgroundColor: 'white',
-    borderBottom: '1px solid #e5e7eb'
-  },
-
-  /* GRAPHS — BOTTOM */
-  graphSection: {
-    flex: '1 1 65%',
-    display: 'flex',
-    flexDirection: 'column',
-    padding: '10px',
-    minHeight: 0
-  },
-
-  gridContainer: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gridTemplateRows: '1fr 1fr',
-    gap: '10px',
-    flex: 1,
-    minHeight: 0
-  }
-};
+    // --- GRAPHS ---
+    graphSection: {
+      padding: "20px",
+      display: "flex",
+      flexDirection: "column",
+    },
+    graphTitle: {
+      marginBottom: "15px",
+      fontSize: "1rem",
+      fontWeight: "bold",
+      color: "#475569",
+    },
+    gridContainer: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr", 
+      gap: "20px",
+      width: "100%",
+    },
+    card: {
+      background: "white",
+      border: "1px solid #e2e8f0",
+      borderRadius: "8px",
+      padding: "15px",
+      display: "flex",
+      flexDirection: "column",
+      height: "300px", 
+      boxShadow: "0 1px 3px rgba(0,0,0,0.05)"
+    },
+    envCard: {
+      background: "white",
+      border: "1px solid #e2e8f0",
+      borderRadius: "8px",
+      padding: "15px",
+      display: "flex",
+      flexDirection: "column",
+      height: "300px", 
+      gridColumn: "1 / -1", 
+      boxShadow: "0 1px 3px rgba(0,0,0,0.05)"
+    },
+  };
 
   return (
-    <>
-      {/* GLOBAL CSS RESET */}
+    <div style={styles.container}>
+      {/* GLOBAL RESET */}
       <style>{`
-                html, body, #root { height: 100%; margin: 0; padding: 0; overflow: hidden; }
-                .leaflet-container { height: 100% !important; width: 100% !important; }
-            `}</style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body, #root { height: 100%; width: 100%; overflow: hidden; }
+        .leaflet-container { height: 100% !important; width: 100% !important; }
+      `}</style>
 
-      <div style={styles.container}>
-        {/* HEADER */}
-        <header style={styles.header}>
-          <h1 style={{ fontSize: "1.2rem", fontWeight: "bold" }}>
-            🚄 RailGuard Operator View
-          </h1>
-          <div style={{ fontSize: "0.9rem" }}>
-            Status:{" "}
-            <span style={{ color: "#4ade80", fontWeight: "bold" }}>
-              MONITORING
-            </span>
-          </div>
-        </header>
+      <header style={styles.header}>
+        <h1 style={{ fontSize: "1.2rem", fontWeight: "bold", margin: 0 }}>
+          🚄 RailGuard Command Center
+        </h1>
+        <div style={{ fontSize: "0.9rem" }}>
+          Status:{" "}
+          <span style={{ color: "#4ade80", fontWeight: "bold" }}>
+            MONITORING
+          </span>
+        </div>
+      </header>
 
-        {/* BODY */}
-        <div style={styles.body}>
-          {/* LEFT: MAP */}
-          <div style={styles.leftPanel}>
-  <div style={{ height: '100%', width: '100%' }}>
-    <MapContainer
-      center={[28.6139, 77.2090]}
-      zoom={13}
-      style={{ height: '100%', width: '100%' }}
-    >
-
+      <div style={styles.body}>
+        {/* LEFT: MAP (35%) */}
+        <div style={styles.leftPanel}>
+            <MapContainer 
+              center={[28.6139, 77.209]} 
+              zoom={13}
+            >
               <TileLayer
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 attribution="&copy; OpenStreetMap"
               />
-              {Object.entries(nodes).map(([id, node]) => (
+              
+              {alerts.map((alert) => (
                 <Marker
-                  key={id}
-                  position={[node.lat || 0, node.lng || 0]}
-                  icon={icons[node.status] || icons.green}
-                  eventHandlers={{ click: () => setSelectedNode(id) }}
+                    key={`alert-${alert.id}`}
+                    position={[alert.lat || 0, alert.lng || 0]}
+                    icon={icons.red}
                 >
-                  <Popup>
-                    <b>{id}</b>
-                    <br />
-                    Status: {node.status}
-                  </Popup>
+                    <Popup>
+                        <div style={{minWidth: '150px'}}>
+                            <b style={{color: 'red'}}>🚨 {alert.nodeId}</b><br/>
+                            Severity: {alert.severity}<br/>
+                            <hr style={{margin: '5px 0'}}/>
+                            {alert.isConstruction ? (
+                                <div style={{background: '#fef3c7', padding: '5px', borderRadius: '4px', fontSize: '0.8rem', color: '#92400e'}}>
+                                    🚧 <b>Construction Site</b><br/>Verified
+                                </div>
+                            ) : (
+                                <button 
+                                    onClick={() => handleMarkConstruction(alert.id)}
+                                    style={{width: '100%', padding: '5px', cursor: 'pointer', background: '#374151', color: 'white', border: 'none', borderRadius: '4px'}}
+                                >
+                                    Mark Construction
+                                </button>
+                            )}
+                        </div>
+                    </Popup>
                 </Marker>
-              ))}
-            </MapContainer>
-          </div>
+            ))}
 
-          {/* RIGHT: DATA */}
-          <div style={styles.rightPanel}>
-            {/* 1. ALERTS */}
-            <div style={styles.alertSection}>
-              <div
-                style={{
-                  padding: "10px 15px",
-                  borderBottom: "1px solid #eee",
-                  fontWeight: "bold",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  position: "sticky",
-                  top: 0,
-                  background: "white",
-                  zIndex: 10,
-                }}
+            {Object.entries(nodes).map(([id, node]) => (
+              <Marker
+                key={id}
+                position={[node.lat || 0, node.lng || 0]}
+                icon={icons[node.status] || icons.green}
+                eventHandlers={{ click: () => setSelectedNode(id) }}
               >
-                <span>🚨 Active Incident Feed</span>
-                <span style={{ color: "red", fontSize: "0.8rem" }}>
-                  {alerts.length} Active
-                </span>
-              </div>
-              <table
-                style={{
-                  width: "100%",
-                  fontSize: "0.85rem",
-                  borderCollapse: "collapse",
-                }}
-              >
-                <thead
-                  style={{
-                    background: "#f1f5f9",
-                    color: "#64748b",
-                    textAlign: "left",
-                  }}
-                >
+                <Popup>
+                  <b>{id}</b><br />Status: {node.status}
+                </Popup>
+              </Marker>
+            ))}
+          </MapContainer>
+        </div>
+
+        {/* RIGHT: DATA (Fill Remaining Space) */}
+        <div style={styles.rightPanel}>
+          {/* ALERTS */}
+          <div style={styles.alertSection}>
+            <div style={styles.alertHeader}>
+              <span>Active Incident Feed</span>
+              <span style={{ color: "red", fontSize: "0.8rem" }}>
+                {alerts.length} Active
+              </span>
+            </div>
+            <div style={styles.alertTableWrapper}>
+              <table style={{ width: "100%", fontSize: "0.85rem", borderCollapse: "collapse" }}>
+                <thead style={{ background: "#f1f5f9", color: "#64748b", textAlign: "left", position: "sticky", top: 0 }}>
                   <tr>
-                    <th style={{ padding: "8px 15px" }}>Time</th>
-                    <th style={{ padding: "8px 15px" }}>Node</th>
-                    <th style={{ padding: "8px 15px" }}>Severity</th>
-                    <th style={{ padding: "8px 15px" }}>Conf.</th>
+                    <th style={{ padding: "12px 15px" }}>Time</th>
+                    <th style={{ padding: "12px 15px" }}>Node</th>
+                    <th style={{ padding: "12px 15px" }}>Severity</th>
+                    <th style={{ padding: "12px 15px" }}>Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   {alerts.map((alert, idx) => (
-                    <tr key={idx} style={{ borderBottom: "1px solid #f1f5f9" }}>
-                      <td style={{ padding: "8px 15px" }}>
+                    <tr key={idx} style={{ borderBottom: "1px solid #f1f5f9", background: alert.isConstruction ? '#fffbeb' : 'white' }}>
+                      <td style={{ padding: "10px 15px" }}>
                         {new Date(alert.timestamp).toLocaleTimeString()}
                       </td>
-                      <td style={{ padding: "8px 15px" }}>{alert.nodeId}</td>
-                      <td style={{ padding: "8px 15px" }}>
-                        <span
-                          style={{
-                            padding: "2px 6px",
-                            borderRadius: "4px",
-                            fontSize: "0.7rem",
-                            fontWeight: "bold",
-                            background:
-                              alert.severity === "HIGH" ? "#fee2e2" : "#fef9c3",
-                            color:
-                              alert.severity === "HIGH" ? "#991b1b" : "#854d0e",
-                          }}
-                        >
+                      <td style={{ padding: "10px 15px" }}>{alert.nodeId}</td>
+                      <td style={{ padding: "10px 15px" }}>
+                        <span style={{ padding: "2px 8px", borderRadius: "10px", fontSize: "0.75rem", fontWeight: "bold", background: alert.severity === "HIGH" ? "#fee2e2" : "#fef9c3", color: alert.severity === "HIGH" ? "#991b1b" : "#854d0e" }}>
                           {alert.severity}
                         </span>
                       </td>
-                      <td style={{ padding: "8px 15px" }}>
-                        {Math.round(Math.abs(alert.anomaly_score) * 100)}%
+                      <td style={{ padding: "10px 15px" }}>
+                          {alert.isConstruction ? (
+                              <span style={{fontSize: '0.75rem', color: '#b45309'}}>🚧 Site Verified</span>
+                          ) : (
+                              <button onClick={() => handleMarkConstruction(alert.id)} style={{border: '1px solid #cbd5e1', background: 'white', cursor: 'pointer', padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', color: '#475569'}}>Mark Construction</button>
+                          )}
                       </td>
                     </tr>
                   ))}
+                  {alerts.length === 0 && (
+                      <tr>
+                          <td colSpan="4" style={{padding: '20px', textAlign: 'center', color: '#94a3b8'}}>No active incidents</td>
+                      </tr>
+                  )}
                 </tbody>
               </table>
             </div>
+          </div>
 
-            {/* 2. GRAPHS */}
-            <div style={styles.graphSection}>
-              <div
-                style={{
-                  marginBottom: "5px",
-                  fontSize: "0.9rem",
-                  fontWeight: "bold",
-                  color: "#475569",
-                }}
-              >
-                📈 Live Telemetry
+          {/* GRAPHS */}
+          <div style={styles.graphSection}>
+            <div style={styles.graphTitle}>
+            📈 Live Telemetry {selectedNode ? `(${selectedNode})` : ''}
+            </div>
+
+            <div style={styles.gridContainer}>
+              {/* Vibration */}
+              <div style={styles.card}>
+                <div style={{ fontSize: "0.75rem", fontWeight: "bold", color: "#94a3b8", marginBottom: "10px", textTransform: "uppercase" }}>VIBRATION</div>
+                <div style={{ flex: 1 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={graphData}>
+                      <CartesianGrid stroke="#f1f5f9" />
+                      <XAxis dataKey="time" hide />
+                      <YAxis width={30} tick={{ fontSize: 10 }} />
+                      <Tooltip />
+                      <Line type="monotone" dataKey="accel_mag" stroke="#6366f1" dot={false} strokeWidth={2} isAnimationActive={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
 
-<div style={styles.gridContainer}>
-                {/* Vibration */}
-                <div
-                  style={{
-                    background: "white",
-                    border: "1px solid #e2e8f0",
-                    borderRadius: "6px",
-                    padding: "10px",
-                    display: "flex",
-                    flexDirection: "column",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: "0.7rem",
-                      fontWeight: "bold",
-                      color: "#94a3b8",
-                      marginBottom: "5px",
-                    }}
-                  >
-                    VIBRATION
-                  </div>
-                  <div style={{ flex: 1, minHeight: 0 }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={graphData}>
-                        <CartesianGrid stroke="#f1f5f9" />
-                        <XAxis dataKey="time" hide />
-                        <YAxis width={30} tick={{ fontSize: 10 }} />
-                        <Tooltip />
-                        <Line
-                          type="monotone"
-                          dataKey="accel_mag"
-                          stroke="#6366f1"
-                          dot={false}
-                          strokeWidth={2}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
+              {/* Magnetic */}
+              <div style={styles.card}>
+                <div style={{ fontSize: "0.75rem", fontWeight: "bold", color: "#94a3b8", marginBottom: "10px", textTransform: "uppercase" }}>MAGNETIC</div>
+                <div style={{ flex: 1 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={graphData}>
+                      <CartesianGrid stroke="#f1f5f9" />
+                      <XAxis dataKey="time" hide />
+                      <YAxis width={30} tick={{ fontSize: 10 }} domain={["auto", "auto"]} />
+                      <Tooltip />
+                      <Line type="monotone" dataKey="mag_norm" stroke="#f59e0b" dot={false} strokeWidth={2} isAnimationActive={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
                 </div>
+              </div>
 
-                {/* Magnetic */}
-                <div
-                  style={{
-                    background: "white",
-                    border: "1px solid #e2e8f0",
-                    borderRadius: "6px",
-                    padding: "10px",
-                    display: "flex",
-                    flexDirection: "column",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: "0.7rem",
-                      fontWeight: "bold",
-                      color: "#94a3b8",
-                      marginBottom: "5px",
-                    }}
-                  >
-                    MAGNETIC
-                  </div>
-                  <div style={{ flex: 1, minHeight: 0 }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={graphData}>
-                        <CartesianGrid stroke="#f1f5f9" />
-                        <XAxis dataKey="time" hide />
-                        <YAxis
-                          width={30}
-                          tick={{ fontSize: 10 }}
-                          domain={["auto", "auto"]}
-                        />
-                        <Tooltip />
-                        <Line
-                          type="monotone"
-                          dataKey="mag_norm"
-                          stroke="#f59e0b"
-                          dot={false}
-                          strokeWidth={2}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-
-                {/* Environment */}
-                <div
-                  style={{
-                    gridColumn: "span 2",
-                    background: "white",
-                    border: "1px solid #e2e8f0",
-                    borderRadius: "6px",
-                    padding: "10px",
-                    display: "flex",
-                    flexDirection: "column",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: "0.7rem",
-                      fontWeight: "bold",
-                      color: "#94a3b8",
-                      marginBottom: "5px",
-                    }}
-                  >
-                    ENVIRONMENT
-                  </div>
-                  <div style={{ flex: 1, minHeight: 0 }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        data={[
-                          {
-                            name: "Temp",
-                            value: latestEnv.temperature || 0,
-                            fill: "#ef4444",
-                          },
-                          {
-                            name: "Hum",
-                            value: latestEnv.humidity || 0,
-                            fill: "#3b82f6",
-                          },
-                          {
-                            name: "Pres",
-                            value: (latestEnv.pressure || 0) / 100,
-                            fill: "#8b5cf6",
-                          },
-                        ]}
-                        layout="vertical"
-                      >
-                        <CartesianGrid stroke="#f1f5f9" horizontal={false} />
-                        <XAxis type="number" tick={{ fontSize: 10 }} />
-                        <YAxis
-                          dataKey="name"
-                          type="category"
-                          width={40}
-                          tick={{ fontSize: 10 }}
-                        />
-                        <Tooltip />
-                        <Bar
-                          dataKey="value"
-                          barSize={15}
-                          radius={[0, 4, 4, 0]}
-                        />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
+              {/* Environment */}
+              <div style={styles.envCard}>
+                <div style={{ fontSize: "0.75rem", fontWeight: "bold", color: "#94a3b8", marginBottom: "10px", textTransform: "uppercase" }}>ENVIRONMENT</div>
+                <div style={{ flex: 1 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={[
+                        { name: "Temp", value: latestEnv.temperature || 0, fill: "#ef4444" },
+                        { name: "Hum", value: latestEnv.humidity || 0, fill: "#3b82f6" },
+                        { name: "Pres", value: (latestEnv.pressure || 0) / 100, fill: "#8b5cf6" },
+                      ]}
+                      layout="vertical"
+                    >
+                      <CartesianGrid stroke="#f1f5f9" horizontal={false} />
+                      <XAxis type="number" tick={{ fontSize: 10 }} />
+                      <YAxis dataKey="name" type="category" width={50} tick={{ fontSize: 11 }} />
+                      <Tooltip />
+                      <Bar dataKey="value" barSize={20} radius={[0, 4, 4, 0]} isAnimationActive={false} />
+                    </BarChart>
+                  </ResponsiveContainer>
                 </div>
               </div>
             </div>
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }
