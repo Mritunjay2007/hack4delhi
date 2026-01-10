@@ -1,6 +1,7 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
+#include <math.h> // Needed for sqrt()
 
 // --- CONFIGURATION ---
 const char *ssid = "YOUR_WIFI_NAME";     // <--- UPDATE THIS
@@ -60,69 +61,79 @@ void loop()
   // Check for User Input (Tampering Simulation)
   bool isTampering = (digitalRead(BOOT_BUTTON) == LOW);
 
-  // --- DATA GENERATION ---
-
-  float accel_mag, mag_norm;
+  // --- 1. SIMULATE RAW SENSOR DATA ---
+  float ax, ay, az; // Accelerometer (g)
+  float gx, gy, gz; // Gyroscope (dps)
+  float mx, my, mz; // Magnetometer (uT)
+  float heading;
 
   if (isTampering)
   {
-    // ⚠️ ATTACK SCENARIO
-    // Vibration: Chaotic high spikes (Sawing/Hammering)
-    accel_mag = random(250, 800) / 100.0; // 2.5g to 8.0g
+    // ⚠️ ATTACK SCENARIO: High chaotic values
+    ax = random(-400, 400) / 100.0; 
+    ay = random(-400, 400) / 100.0;
+    az = random(-400, 400) / 100.0;
 
-    // Magnetic: Fluctuates due to metal tools moving near sensor
-    mag_norm = 45.0 + (random(-150, 150) / 10.0); // 30uT to 60uT
+    mx = 30.0 + (random(-200, 200) / 10.0);
+    my = 10.0 + (random(-200, 200) / 10.0);
+    mz = -40.0 + (random(-200, 200) / 10.0);
   }
   else
   {
-    // ✅ NORMAL SCENARIO
-    // Vibration: Low background noise
-    accel_mag = random(2, 15) / 100.0; // 0.02g to 0.15g
+    // ✅ NORMAL SCENARIO: Low noise
+    ax = random(-5, 5) / 100.0;
+    ay = random(-5, 5) / 100.0;
+    az = 1.0 + (random(-5, 5) / 100.0); // Gravity
 
-    // Magnetic: Stable Earth field (~45uT) + tiny noise
-    mag_norm = 45.0 + (random(-10, 10) / 10.0);
+    mx = 30.0 + (random(-2, 2) / 10.0);
+    my = 10.0 + (random(-2, 2) / 10.0);
+    mz = -40.0 + (random(-2, 2) / 10.0);
   }
 
-  // Environment (Stable-ish)
-  float temp = 28.0 + (random(-5, 5) / 10.0);         // ~28 C
-  float hum = 60.0 + (random(-20, 20) / 10.0);        // ~60 %
-  float pressure = 1013.0 + (random(-10, 10) / 10.0); // ~1013 hPa
+  // --- 2. CALCULATE DERIVED FEATURES (Required for Dashboard) ---
+  // We do simple math here to save the backend from doing it
+  float accel_mag = sqrt(ax*ax + ay*ay + az*az);
+  float mag_norm = sqrt(mx*mx + my*my + mz*mz);
+  float accel_roll_rms = accel_mag * 0.707; // Approx RMS
 
-  // --- JSON PACKING ---
-  // Increased size to 512 to fit all new fields
-  StaticJsonDocument<512> doc;
+  // --- 3. SIMULATE ENVIRONMENT ---
+  float temp = 28.0 + (random(-5, 5) / 10.0);
+  float hum = 60.0 + (random(-20, 20) / 10.0);
+  float pressure = 1013.0 + (random(-10, 10) / 10.0);
+
+  // --- 4. JSON PACKING ---
+  // Large buffer to hold Raw Data + Derived Features + Env Data
+  StaticJsonDocument<1024> doc;
 
   doc["node_id"] = node_id;
   doc["timestamp"] = millis();
 
-  // Telemetry matching Dashboard keys
+  // A. Derived Features (For Dashboard Graphs)
   doc["accel_mag"] = accel_mag;
-  doc["accel_roll_rms"] = accel_mag * 0.707; // Approx RMS for sine wave
+  doc["accel_roll_rms"] = accel_roll_rms;
   doc["mag_norm"] = mag_norm;
 
-  // Environment
+  // B. Raw Data (For Database "Source of Truth")
+  doc["accel_x"] = ax; doc["accel_y"] = ay; doc["accel_z"] = az;
+  doc["mag_x"] = mx;   doc["mag_y"] = my;   doc["mag_z"] = mz;
+  
+  // C. Environment & Location
   doc["temperature"] = temp;
   doc["humidity"] = hum;
   doc["pressure"] = pressure;
-
-  // GPS (Hardcoded for this Node)
   doc["latitude"] = 28.6139;
   doc["longitude"] = 77.2090;
   doc["altitude"] = 216.0;
 
-  char buffer[512];
+  char buffer[1024];
   size_t n = serializeJson(doc, buffer);
 
   // --- PUBLISH ---
   client.publish("railway/sensor/1", buffer, n);
 
   // Debug Output
-  Serial.print("Status: ");
-  Serial.print(isTampering ? "TAMPERING! " : "Normal ");
-  Serial.print("| Vib: ");
-  Serial.print(accel_mag);
-  Serial.print("| Mag: ");
-  Serial.println(mag_norm);
+  Serial.print("Status: "); Serial.print(isTampering ? "TAMPERING " : "NORMAL ");
+  Serial.print("| Vib Mag: "); Serial.println(accel_mag);
 
   delay(500); // 2Hz Update Rate
 }
