@@ -27,54 +27,148 @@ const icons = {
   grey: getIcon("grey"),
 };
 
-const socket = io("http://localhost:3000");
+// Initialize socket outside component to prevent multiple connections
+const socket = io("http://localhost:3000", { autoConnect: false });
 const API_URL = "http://localhost:3000/api/alerts";
 
 export default function Dashboard() {
   // --- STATE ---
+  const [mode, setMode] = useState('LIVE'); // 'LIVE' or 'TEST'
+  
   const [nodes, setNodes] = useState({});
   const [alerts, setAlerts] = useState([]);
   const [telemetry, setTelemetry] = useState([]);
   const [selectedNode, setSelectedNode] = useState(null);
   
   // UX State
-  const [activeTab, setActiveTab] = useState('telemetry'); // 'telemetry' | 'health'
-  const [filterStatus, setFilterStatus] = useState('ALL'); // 'ALL' | 'HIGH' | 'CONSTRUCTION'
+  const [activeTab, setActiveTab] = useState('telemetry');
+  const [filterStatus, setFilterStatus] = useState('ALL');
   const [replayMode, setReplayMode] = useState(false);
-  const [replayIndex, setReplayIndex] = useState(50); // Default to end of buffer
+  const [replayIndex, setReplayIndex] = useState(50);
   
   // Logging State
   const [systemLogs, setSystemLogs] = useState([
-    { id: 0, time: new Date().toLocaleTimeString(), type: 'info', msg: 'System initialized. Waiting for sensor streams...' }
+    { id: 0, time: new Date().toLocaleTimeString(), type: 'info', msg: 'System initialized. Waiting for stream selection...' }
   ]);
 
   const addLog = (msg, type = 'info') => {
     setSystemLogs(prev => [{ id: Date.now(), time: new Date().toLocaleTimeString(), type, msg }, ...prev].slice(0, 50));
   };
 
-  // --- EFFECT HOOKS ---
+  // --- EFFECT: HANDLE MODE SWITCHING ---
   useEffect(() => {
-    fetchAlerts();
+    // Reset Data on Mode Switch
+    setNodes({});
+    setAlerts([]);
+    setTelemetry([]);
+    setSystemLogs([]);
+    addLog(`Switched to ${mode} MODE`, "warning");
 
-    socket.on("connect", () => addLog("Connected to Backend Server", "success"));
-    socket.on("disconnect", () => addLog("Lost connection to Backend Server", "error"));
+    if (mode === 'LIVE') {
+        socket.connect();
+        fetchAlerts(); // Fetch historical real alerts
+        
+        // --- LIVE SOCKET LISTENERS ---
+        socket.on("connect", () => addLog("Connected to Backend Server", "success"));
+        socket.on("disconnect", () => addLog("Lost connection to Backend Server", "error"));
 
-    socket.on("sensor_update", (data) => {
-      setNodes((prev) => ({
+        socket.on("sensor_update", (data) => {
+            updateNodesAndTelemetry(data);
+        });
+
+        socket.on("new_alert", (newAlert) => {
+            setAlerts((prev) => [newAlert, ...prev]);
+            setNodes((prev) => ({
+                ...prev,
+                [newAlert.nodeId]: { ...prev[newAlert.nodeId], status: newAlert.severity === "HIGH" ? "red" : "yellow" },
+            }));
+            addLog(`ANOMALY DETECTED: Node ${newAlert.nodeId} | Severity: ${newAlert.severity}`, "error");
+        });
+
+        socket.on("alert_update", (updatedAlert) => {
+            setAlerts((prev) => prev.map((a) => (a.id === updatedAlert.id ? updatedAlert : a)));
+            if(updatedAlert.isConstruction) addLog(`Update: Alert ${updatedAlert.id} marked as CONSTRUCTION activity.`, "warning");
+        });
+    } else {
+        socket.disconnect();
+        // Initialize Dummy Nodes for Test Mode
+        setNodes({
+            'TEST-NODE-01': { lat: 28.6139, lng: 77.2090, status: 'green', battery: 98, rssi: -45 },
+            'TEST-NODE-02': { lat: 28.6150, lng: 77.2100, status: 'green', battery: 85, rssi: -60 },
+            'TEST-NODE-03': { lat: 28.6120, lng: 77.2080, status: 'yellow', battery: 40, rssi: -80 }
+        });
+        addLog("Test Mode Initialized. Simulating sensor data...", "info");
+    }
+
+    return () => {
+        socket.off("connect");
+        socket.off("disconnect");
+        socket.off("sensor_update");
+        socket.off("new_alert");
+        socket.off("alert_update");
+    };
+  }, [mode]);
+
+  // --- EFFECT: TEST MODE SIMULATION LOOP ---
+  useEffect(() => {
+    if (mode !== 'TEST') return;
+
+    const interval = setInterval(() => {
+        const timestamp = Date.now();
+        const timeStr = new Date(timestamp).toLocaleTimeString();
+        
+        // 1. Simulate Telemetry (Sine waves for realistic look)
+        const t = timestamp / 1000;
+        const fakeData = {
+            node_id: 'TEST-NODE-01',
+            timestamp: timestamp,
+            lat: 28.6139, lng: 77.2090,
+            accel_mag: Math.abs(Math.sin(t)) * 0.5 + Math.random() * 0.1, // Vibration
+            accel_roll_rms: Math.abs(Math.sin(t)) * 0.3,
+            mag_norm: 45 + Math.cos(t) * 5, // Magnetic
+            temperature: 28 + Math.random(),
+            humidity: 60 + Math.random() * 2,
+            pressure: 1013,
+            anomaly_score: Math.random() > 0.9 ? -0.5 : 0.5
+        };
+
+        updateNodesAndTelemetry(fakeData);
+
+        // 2. Simulate Random Alert (Rarely)
+        if (Math.random() > 0.98) {
+            const fakeAlert = {
+                id: timestamp,
+                timestamp: timestamp,
+                nodeId: 'TEST-NODE-03',
+                lat: 28.6120, lng: 77.2080,
+                severity: Math.random() > 0.5 ? 'HIGH' : 'MEDIUM',
+                isConstruction: false
+            };
+            setAlerts(prev => [fakeAlert, ...prev]);
+            addLog(`[SIMULATION] Alert generated on TEST-NODE-03`, "error");
+        }
+
+    }, 800); // Update every 800ms
+
+    return () => clearInterval(interval);
+  }, [mode]);
+
+  // --- HELPER: Update State (Used by both Live and Test) ---
+  const updateNodesAndTelemetry = (data) => {
+    setNodes((prev) => ({
         ...prev,
         [data.node_id]: {
-          lat: data.latitude,
-          lng: data.longitude,
-          alt: data.altitude,
+          lat: data.lat || data.latitude,
+          lng: data.lng || data.longitude,
+          alt: data.altitude || 0,
           lastSeen: data.timestamp,
-          status: data.severity || "green",
-          // Mock metadata for "Node Health" tab
-          battery: Math.max(0, 100 - (Date.now() % 10000) / 100), // fluctuating mock
-          rssi: -40 - Math.random() * 20
+          status: prev[data.node_id]?.status || 'green', // Preserve status unless alert changes it
+          battery: Math.max(0, 100 - (Date.now() % 100000) / 1000), 
+          rssi: -40 - Math.random() * 10
         },
-      }));
+    }));
 
-      setTelemetry((prev) => {
+    setTelemetry((prev) => {
         const newData = [...prev, {
             time: new Date(data.timestamp).toLocaleTimeString(),
             node_id: data.node_id,
@@ -84,37 +178,15 @@ export default function Dashboard() {
             temperature: data.temperature,
             humidity: data.humidity,
             pressure: data.pressure,
-            anomaly_score: data.anomaly_score || 0 // Ensure this exists
+            anomaly_score: data.anomaly_score
         }];
-        return newData.slice(-100); // Keep 100 for replay buffer
-      });
+        return newData.slice(-100); 
     });
-
-    socket.on("new_alert", (newAlert) => {
-      setAlerts((prev) => [newAlert, ...prev]);
-      setNodes((prev) => ({
-        ...prev,
-        [newAlert.nodeId]: { ...prev[newAlert.nodeId], status: newAlert.severity === "HIGH" ? "red" : "yellow" },
-      }));
-      addLog(`ANOMALY DETECTED: Node ${newAlert.nodeId} | Severity: ${newAlert.severity}`, "error");
-    });
-
-    socket.on("alert_update", (updatedAlert) => {
-      setAlerts((prev) => prev.map((a) => (a.id === updatedAlert.id ? updatedAlert : a)));
-      if(updatedAlert.isConstruction) addLog(`Update: Alert ${updatedAlert.id} marked as CONSTRUCTION activity.`, "warning");
-    });
-
-    return () => {
-      socket.off("sensor_update");
-      socket.off("new_alert");
-      socket.off("alert_update");
-      socket.off("connect");
-      socket.off("disconnect");
-    };
-  }, []);
+  };
 
   // --- ACTIONS ---
   const fetchAlerts = async () => {
+    if (mode === 'TEST') return; // Don't fetch real alerts in test mode
     try {
       const res = await axios.get(API_URL);
       setAlerts(res.data);
@@ -124,6 +196,11 @@ export default function Dashboard() {
   };
 
   const handleMarkConstruction = async (alertId) => {
+    if (mode === 'TEST') {
+        setAlerts(prev => prev.map(a => a.id === alertId ? { ...a, isConstruction: true } : a));
+        addLog(`[SIMULATION] Alert ${alertId} marked as construction`, "info");
+        return;
+    }
     try {
       await axios.post(`${API_URL}/mark-construction`, { id: alertId });
       addLog(`User Action: Verifying alert ${alertId} as construction site...`, "info");
@@ -134,7 +211,6 @@ export default function Dashboard() {
 
   const handleDispatch = (alertId) => {
       addLog(`DISPATCH: Inspection Team Alpha sent to Site ID: ${alertId}`, "success");
-      // In a real app, this would hit an API
   };
 
   // --- DATA PROCESSING ---
@@ -195,6 +271,12 @@ export default function Dashboard() {
     // Footer Console
     footer: { height: "140px", backgroundColor: "#0f172a", color: "#e2e8f0", display: "flex", flexDirection: "column", borderTop: "4px solid #334155", flexShrink: 0, fontFamily: "'Courier New', monospace", zIndex: 60 },
     consoleBody: { flex: 1, overflowY: "auto", padding: "10px 15px", fontSize: "0.8rem", lineHeight: "1.6" },
+    
+    // Mode Select
+    modeSelect: {
+        padding: '6px 12px', borderRadius: '6px', border: '1px solid #475569', 
+        background: '#1e293b', color: 'white', fontWeight: 'bold', cursor: 'pointer'
+    }
   };
 
   // --- RENDER ---
@@ -224,9 +306,20 @@ export default function Dashboard() {
             <div style={{fontSize:'0.75rem', opacity:0.8}}>Professional Operator Interface</div>
           </div>
         </div>
-        <div style={styles.statusBadge}>
-          <div className="status-dot"></div>
-          <span style={{fontSize:'0.8rem', color:'#4ade80', fontWeight:'600'}}>LIVE FEED</span>
+        
+        {/* MODE SWITCHER */}
+        <div style={{display:'flex', alignItems:'center', gap:'20px'}}>
+            <select style={styles.modeSelect} value={mode} onChange={(e) => setMode(e.target.value)}>
+                <option value="LIVE">🔴 LIVE SENSORS</option>
+                <option value="TEST">🧪 TEST MODE (SIM)</option>
+            </select>
+
+            <div style={styles.statusBadge}>
+                <div className="status-dot" style={{background: mode==='LIVE'?'#4ade80':'#f59e0b'}}></div>
+                <span style={{fontSize:'0.8rem', color: mode==='LIVE'?'#4ade80':'#f59e0b', fontWeight:'600'}}>
+                    {mode === 'LIVE' ? 'SYSTEM ACTIVE' : 'SIMULATION'}
+                </span>
+            </div>
         </div>
       </header>
 
