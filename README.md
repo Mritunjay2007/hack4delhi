@@ -1,92 +1,143 @@
+```
 # 🚆 Railway Track Tampering Detection System
 
-AI-powered IoT system for real-time detection of intentional railway track tampering.
+An AI-powered IoT solution designed to detect intentional railway track tampering in real-time. This system fuses sensor data from ESP32 nodes with an Isolation Forest AI model to identify anomalies (vibration, magnetic changes, tilt) and alert operators instantly via a live dashboard.
 
-## Problem Statement
+## 🚀 Problem Statement
+Railway safety is often compromised by sabotage or tampering. This system aims to:
+* **Detect** physical tampering events (sawing, hammering, removal) in real-time.
+* **Analyze** sensor data using Edge AI and Cloud AI.
+* **Visualize** threats on a geospatial dashboard for immediate action.
 
-Detects the act of tampering in real time using sensor data and AI.
+## 🛠 Tech Stack
 
-## Tech Stack
+* **Hardware:** ESP32 (C/C++), ADXL345 (Accelerometer), QMC5883L (Magnetometer), INMP441 (Microphone).
+* **Communication:** MQTT (HiveMQ Broker), WebSockets (Socket.io).
+* **Backend:** Node.js + Express.
+* **AI Service:** Python + FastAPI + scikit-learn (Isolation Forest).
+* **Frontend:** React.js + Recharts + Leaflet Maps + Tailwind CSS.
 
-- ESP32 (C/C++)
-- MQTT
-- Node.js + Express + Socket.IO
-- Python + FastAPI + scikit-learn
-- React Dashboard
+## 🔄 System Architecture
 
-## System Flow
+**`ESP32 Node`** 📡 *(MQTT)* ➔ **`HiveMQ Broker`** ☁️ ➔ **`Node.js Backend`** ⚙️ 
+➔ **`Python AI Service`** 🧠 *(HTTP)* ➔ **`Node.js Backend`** ⚡ *(Socket.io)* ➔ **`React Dashboard`** 🖥️
 
-ESP32 → MQTT → Node.js → Python AI → Node.js → React Dashboard
+---
 
-## How to use it
+## ⚙️ Installation & Setup
 
-Step 1: Fork the reporsitory.
+### Prerequisites
+* Node.js (v16+)
+* Python (v3.9+)
+* Git
 
-Step 2: Clone the reposiroty.
+### 1. Clone the Repository
+```bash
+git clone <your-repo-url>
+cd <your-repo-name>
 
-Step 3: Open terminal and go into `Software/frontend`.
-
-Step 4: run `npm install` in your terminal.
-
-Step 5: Go into `Software/backend/node-server`.
-
-Step 6: run `npm install` in your terminal.
-
-Step 7: Go into `cd ai-service` and run `pip install -r requirements.txt`.
-
-
-After succesfully installing all the dependencies, Run the WebApp by following the steps below:
-
-Step 8: Open Terminal, go into the cloned repository and run `cd Software/backend/node-server/ai-server`.
-
-Step 9 : run `python -m uvicorn main:app --reload --port 8000`.
-
-You should see something like...
-```
-INFO: Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
-
-INFO: Started reloader process [16136] using StatReload
-
-INFO: Started server process [31240]
-
-INFO: Waiting for application startup.
-
-✅ AI Model Trained on Normal Baseline
-
-INFO: Application startup complete.
 ```
 
-Step 10: Open another Terminal, go into the cloned repository and run `cd Software/backend/node-server`.
+### 2. Setup Frontend
 
-Step 11 : run `node index.js`.
+```bash
+cd Software/frontend
+npm install
 
-You should see something like...
 ```
-🚀 Server + API running on 3000
 
-Frontend Dashboard Connected: **_...
+### 3. Setup Backend (Node.js)
 
+```bash
+cd ../backend/node-server
+npm install
+
+```
+
+### 4. Setup AI Service (Python)
+
+```bash
+cd ai-service
+# It is recommended to create a virtual environment first
+pip install -r requirements.txt
+
+```
+
+---
+
+## 🏃‍♂️ How to Run
+
+To run the full system, you will need **three separate terminal windows**.
+
+### Terminal 1: Start AI Service (Python)
+
+This service processes sensor data to detect anomalies.
+
+```bash
+# Navigate to: Software/backend/node-server/ai-service
+python -m uvicorn main:app --reload --port 5000
+
+```
+
+*You should see:* `✅ AI Model Loaded` or `INFO: Uvicorn running on http://127.0.0.1:5000`
+
+### Terminal 2: Start Backend Server (Node.js)
+
+This acts as the bridge between MQTT, AI, and the Dashboard.
+
+```bash
+# Navigate to: Software/backend/node-server
+node index.js
+
+```
+
+*You should see:* ```
+🚀 Server running on http://localhost:3000
 ✅ Connected to MQTT Broker
+📡 Socket Stream Active
 
-Frontend Dashboard Connected: _**...
 ```
 
-Step 12 : Open another Terminal, go into the cloned repository and run `cd Software/frontend`.
+### Terminal 3: Start Dashboard (Frontend)
+The user interface for monitoring.
+```bash
+# Navigate to: Software/frontend
+npm run dev
 
-Step 13: run `npm run dev`.
-
-You should see something like...
-```
-VITE v7.3.1 ready in 648 ms
-
-
-➜ Local: http://localhost:5173/
-
-➜ Network: use --host to expose
-
-➜ press h + enter to show help
 ```
 
-## Status
+*You should see:* `➜ Local: http://localhost:5173/`
 
-Hackathon prototype
+---
+
+## 🧪 Testing the System
+
+1. **Open Dashboard:** Go to `http://localhost:5173` in your browser.
+2. **Select Mode:**
+* **LIVE:** Connects to your real ESP32 device.
+* **TEST (SIM):** Simulates data if you don't have the hardware connected.
+
+
+3. **Trigger Anomaly:**
+* Shake the ESP32 or bring a magnet close to it.
+* The Dashboard graph should spike, and a **Red Alert** marker should appear on the map.
+
+
+
+## 📂 Project Structure
+
+```
+Software/
+├── frontend/                 # React Dashboard
+├── backend/
+│   └── node-server/          # Main Server (Express + MQTT)
+│       ├── ai-service/       # Python AI Model (FastAPI)
+│       ├── mqtt/             # MQTT Client Logic
+│       ├── socket/           # WebSocket Logic
+│       └── index.js          # Entry Point
+
+```
+
+## 🚧 Status
+
+**Hackathon Prototype** - Functional MVP with real-time detection and alerting.

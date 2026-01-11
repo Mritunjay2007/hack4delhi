@@ -1,10 +1,12 @@
 module.exports = {
     mqtt: {
-        brokerUrl: 'mqtt://broker.hivemq.com', // Or 'mqtt://test.mosquitto.org'
-        topic: 'railway/sensor/+'
+        brokerUrl: 'mqtt://test.mosquitto.org', 
+        // topic: 'railway/sensor/+'
+        topic: 'railguard_live_stream'
     },
     ai: {
-        url: 'http://127.0.0.1:8000/predict'
+        // CHANGED: Port 8000 -> 5000 (Matches your Python main.py)
+        url: 'http://127.0.0.1:5000/predict'
     },
     server: {
         port: 3000

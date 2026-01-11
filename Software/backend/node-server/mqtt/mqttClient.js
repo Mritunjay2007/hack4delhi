@@ -2,69 +2,83 @@ const mqtt = require('mqtt');
 const config = require('../config/config');
 const aiService = require('../ai/aiService');
 const { broadcastUpdate } = require('../socket/socket');
-const { sendCriticalAlert } = require('../services/alertService'); // Import Alert Service
+const { sendCriticalAlert } = require('../services/alertService');
 
 const connectMQTT = (onAnomalyCallback) => {
-    const client = mqtt.connect(config.mqtt.brokerUrl);
+    // Robust connection options
+    const client = mqtt.connect(config.mqtt.brokerUrl, {
+        reconnectPeriod: 1000,
+        connectTimeout: 30 * 1000,
+        keepalive: 60
+    });
 
     client.on('connect', () => {
         console.log('✅ Connected to MQTT Broker');
-        client.subscribe(config.mqtt.topic);
+        client.subscribe(config.mqtt.topic, (err) => {
+            if (!err) console.log(`📡 Listening on: ${config.mqtt.topic}`);
+        });
     });
+
+    client.on('error', (err) => console.error("⚠️ MQTT Error:", err.message));
+    client.on('offline', () => console.warn("🔌 MQTT Offline"));
 
     client.on('message', async (topic, message) => {
         try {
-            const rawData = JSON.parse(message.toString());
+            // --- DEBUG: Print exactly what arrived ---
+            const msgString = message.toString();
             
-            // 1. Get AI Decision
-            // Expects: { is_anomaly: true, severity: 'HIGH', anomaly_score: -0.5 }
+            // 1. Safety Check: Is it empty?
+            if (!msgString || msgString.trim().length === 0) {
+                console.warn("⚠️ Received EMPTY message. Ignoring.");
+                return;
+            }
+
+            // 2. Parse Data
+            let rawData;
+            try {
+                rawData = JSON.parse(msgString);
+            } catch (jsonErr) {
+                console.error("❌ JSON Parse Failed. Received:", msgString);
+                return; // Stop here if it's not valid JSON
+            }
+            
+            // 3. BROADCAST RAW DATA IMMEDIATELY
+            broadcastUpdate({ ...rawData, is_anomaly: false, processing: true });
+
+            // 4. Get AI Prediction (Async)
             const aiResult = await aiService.getPrediction(rawData);
             
-            // 2. Merge Data (Raw Sensor Data + AI Insights)
+            // 5. Merge & Broadcast Final Result
             const enrichedData = {
                 ...rawData,
                 ...aiResult,
                 processed_at: new Date().toISOString()
             };
-
-            // 3. Push Telemetry to Frontend (Updates Live Graphs immediately)
-            // This happens regardless of anomaly status
+            
+            // Update Dashboard again
             broadcastUpdate(enrichedData);
 
-            // 4. Handle Anomaly Logic
+            // 6. Handle Alerts
             if(enrichedData.is_anomaly) {
-                console.log(`⚠️ CRITICAL ALERT: Tampering detected at ${enrichedData.node_id}`);
-                
-                // --- STEP A: Trigger External Notifications (Email) ---
-                // This calls the service we created. It handles rate-limiting internally.
-                sendCriticalAlert(enrichedData);
+                console.log(`🚨 ANOMALY: ${enrichedData.node_id} | Score: ${enrichedData.anomaly_score}`);
+                sendCriticalAlert(enrichedData).catch(e => console.error("Email Error:", e.message));
 
-                // --- STEP B: Format Alert for Dashboard & Storage ---
-                // We create a structured object that matches what the React Dashboard expects
                 const alertPacket = {
-                    id: Date.now(), // Unique ID for React lists
+                    id: Date.now(),
                     nodeId: enrichedData.node_id,
                     severity: enrichedData.severity || 'HIGH',
                     timestamp: enrichedData.timestamp || Date.now(),
-                    // Map ESP32 'latitude' to Dashboard 'lat'
                     lat: enrichedData.latitude, 
                     lng: enrichedData.longitude,
-                    // New Fields for User Action
-                    status: 'OPEN', // Default status for dropdown
+                    status: 'OPEN',
                     isConstruction: false,
                     anomaly_score: enrichedData.anomaly_score
                 };
                 
-                // --- STEP C: Execute Callback ---
-                // This passes 'alertPacket' back to index.js to:
-                // 1. Save to alerts.json (Persistence)
-                // 2. Emit 'new_alert' socket event (Frontend Sound & Map Marker)
-                if (onAnomalyCallback) {
-                    onAnomalyCallback(alertPacket);
-                }
+                if (onAnomalyCallback) onAnomalyCallback(alertPacket);
             }
         } catch (err) {
-            console.error("Error processing MQTT message:", err.message);
+            console.error("❌ Message Loop Error:", err.message);
         }
     });
 
