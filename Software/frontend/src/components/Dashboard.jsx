@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useMemo, useRef } from "react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import {
-  LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
+  LineChart, Line, BarChart, Bar, AreaChart, Area, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from "recharts";
 import L from "leaflet";
 import io from "socket.io-client";
@@ -122,7 +122,8 @@ export default function Dashboard() {
             temperature: data.temperature,
             humidity: data.humidity,
             pressure: data.pressure,
-            mic_level: data.mic_level,
+            mic_level: data.mic_level || 0,     // <--- ENSURE MIC DATA
+            frequency: data.frequency || 0,     // <--- ADD FREQUENCY DATA
             anomaly_score: data.anomaly_score,
           };
           return [...prev, newPoint].slice(-50); // Keep last 50 points
@@ -207,6 +208,8 @@ export default function Dashboard() {
             lat: 28.6139, lng: 77.209,
             accel_mag: Math.random() * 0.5,
             mag_norm: 45 + Math.cos(t/1000) * 5,
+            mic_level: Math.random() * 80, // Simulation
+            frequency: 48 + Math.random() * 4, // Simulation
             temperature: 28, humidity: 60, pressure: 1013
         };
         // Reuse the same update logic manually for test mode
@@ -452,6 +455,7 @@ export default function Dashboard() {
 
             {activeTab === "telemetry" ? (
               <div style={styles.gridContainer}>
+                {/* 1. VIBRATION */}
                 <div style={styles.chartCard}>
                   <div style={{ fontSize: "0.75rem", fontWeight: "700", color: "#64748b", marginBottom: "10px" }}>VIBRATION</div>
                   <ResponsiveContainer width="100%" height="100%">
@@ -464,6 +468,8 @@ export default function Dashboard() {
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
+
+                {/* 2. MAGNETIC */}
                 <div style={styles.chartCard}>
                   <div style={{ fontSize: "0.75rem", fontWeight: "700", color: "#64748b", marginBottom: "10px" }}>MAGNETIC (µT)</div>
                   <ResponsiveContainer width="100%" height="100%">
@@ -476,6 +482,51 @@ export default function Dashboard() {
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
+
+                {/* 3. NEW: SOUND MONITOR */}
+                <div style={styles.chartCard}>
+                  <div style={{ fontSize: "0.75rem", fontWeight: "700", color: "#64748b", marginBottom: "10px" }}>
+                    SOUND LEVEL (MIC)
+                  </div>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={displayTelemetry}>
+                        <defs>
+                            <linearGradient id="colorMic" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/>
+                                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                            </linearGradient>
+                        </defs>
+                        <CartesianGrid stroke="#f1f5f9" />
+                        <XAxis dataKey="time" hide />
+                        <YAxis domain={[0, 100]} width={30} tick={{ fontSize: 10 }} />
+                        <Tooltip contentStyle={{ borderRadius: "8px", border: "none", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }} />
+                        <Area type="monotone" dataKey="mic_level" stroke="#3b82f6" fillOpacity={1} fill="url(#colorMic)" isAnimationActive={false} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* 4. NEW: FREQUENCY MONITOR */}
+                <div style={styles.chartCard}>
+                  <div style={{ fontSize: "0.75rem", fontWeight: "700", color: "#64748b", marginBottom: "10px" }}>
+                    VIBRATION FREQUENCY (Hz)
+                  </div>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={displayTelemetry}>
+                        <defs>
+                            <linearGradient id="colorFreq" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.8}/>
+                                <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
+                            </linearGradient>
+                        </defs>
+                        <CartesianGrid stroke="#f1f5f9" />
+                        <XAxis dataKey="time" hide />
+                        <YAxis domain={['auto', 'auto']} width={30} tick={{ fontSize: 10 }} />
+                        <Tooltip contentStyle={{ borderRadius: "8px", border: "none", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }} />
+                        <Area type="monotone" dataKey="frequency" stroke="#8b5cf6" fillOpacity={1} fill="url(#colorFreq)" isAnimationActive={false} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+
               </div>
             ) : (
               <div style={styles.gridContainer}>

@@ -55,6 +55,7 @@ class SensorInput(BaseModel):
     accel_x: float
     accel_y: float
     accel_z: float
+    frequency: float = 0.0
     mag_x: float
     mag_y: float
     mag_z: float
@@ -148,7 +149,8 @@ def predict(data: SensorInput):
             "reasons": reasons,
             "location": {"lat": data.latitude, "lng": data.longitude},
             # Return mic_level so it's clear we processed it
-            "mic_level": data.mic_level 
+            "mic_level": data.mic_level,
+            "frequency": data.frequency
         }
 
     except Exception as e:

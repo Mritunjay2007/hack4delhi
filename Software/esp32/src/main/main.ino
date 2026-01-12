@@ -178,6 +178,7 @@ void loop() {
   doc["accel_x"] = ax;
   doc["accel_y"] = ay;
   doc["accel_z"] = az;
+  doc["frequency"] = freq_val;
   doc["mag_x"] = mx;
   doc["mag_y"] = my;
   doc["mag_z"] = mz;
