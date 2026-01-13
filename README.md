@@ -1,44 +1,88 @@
-```
-# 🚆 Railway Track Tampering Detection System
+```markdown
+<div align="center">
 
-An AI-powered IoT solution designed to detect intentional railway track tampering in real-time. This system fuses sensor data from ESP32 nodes with an Isolation Forest AI model to identify anomalies (vibration, magnetic changes, tilt) and alert operators instantly via a live dashboard.
+  <img src="https://upload.wikimedia.org/wikipedia/en/thumb/4/45/Indian_Railways_logo.svg/1200px-Indian_Railways_logo.svg.png" alt="Indian Railways" width="100" />
+  <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/55/Emblem_of_India.svg/240px-Emblem_of_India.svg.png" alt="GOI" width="60" style="margin-left: 20px; margin-right: 20px;"/>
+  <img src="https://upload.wikimedia.org/wikipedia/en/thumb/1/1d/Make_In_India.png/800px-Make_In_India.png" alt="Make in India" width="120" />
+
+  <br/><br/>
+
+  # 🚆 RailGuard Command Center
+  ### AI-Powered Real-Time Railway Sabotage Detection System
+
+  <p>
+    <a href="#-problem-statement">Problem</a> •
+    <a href="#-system-architecture">Architecture</a> •
+    <a href="#-tech-stack">Tech Stack</a> •
+    <a href="#-installation--setup">Setup</a> •
+    <a href="#-how-to-run">Run</a>
+  </p>
+
+  <img src="https://img.shields.io/badge/Status-Prototype-orange?style=for-the-badge" alt="Status" />
+  <img src="https://img.shields.io/badge/IoT-ESP32-blue?style=for-the-badge&logo=espressif" alt="ESP32" />
+  <img src="https://img.shields.io/badge/AI-Isolation%20Forest-yellow?style=for-the-badge&logo=python" alt="AI" />
+  <img src="https://img.shields.io/badge/Frontend-React-61DAFB?style=for-the-badge&logo=react" alt="React" />
+  <img src="https://img.shields.io/badge/Backend-Node.js-339933?style=for-the-badge&logo=nodedotjs" alt="Node" />
+
+</div>
+
+---
 
 ## 🚀 Problem Statement
-Railway safety is often compromised by sabotage or tampering. This system aims to:
-* **Detect** physical tampering events (sawing, hammering, removal) in real-time.
-* **Analyze** sensor data using Edge AI and Cloud AI.
-* **Visualize** threats on a geospatial dashboard for immediate action.
 
-## 🛠 Tech Stack
+Railway safety is critical, yet infrastructure is often compromised by sabotage, theft, or tampering. Traditional inspection methods are reactive and intermittent. **RailGuard** provides a **proactive** solution to:
 
-* **Hardware:** ESP32 (C/C++), ADXL345 (Accelerometer), QMC5883L (Magnetometer), INMP441 (Microphone).
-* **Communication:** MQTT (HiveMQ Broker), WebSockets (Socket.io).
-* **Backend:** Node.js + Express.
-* **AI Service:** Python + FastAPI + scikit-learn (Isolation Forest).
-* **Frontend:** React.js + Recharts + Leaflet Maps + Tailwind CSS.
+* 🔍 **Detect** physical tampering (sawing, hammering, removal) in real-time.
+* 🧠 **Analyze** multi-sensor data using Edge AI and Cloud AI.
+* 🚨 **Alert** operators instantly via a geospatial dashboard.
+
+---
 
 ## 🔄 System Architecture
 
-**`ESP32 Node`** 📡 *(MQTT)* ➔ **`HiveMQ Broker`** ☁️ ➔ **`Node.js Backend`** ⚙️ 
-➔ **`Python AI Service`** 🧠 *(HTTP)* ➔ **`Node.js Backend`** ⚡ *(Socket.io)* ➔ **`React Dashboard`** 🖥️
+The system follows a linear data pipeline from the physical edge to the operator dashboard.
+
+```mermaid
+graph LR
+    A[ESP32 Node 📡] -->|MQTT| B(HiveMQ Broker ☁️)
+    B -->|Subscribe| C{Node.js Backend ⚙️}
+    C -->|HTTP Post| D[Python AI Service 🧠]
+    D -->|Prediction| C
+    C -->|Socket.io| E[React Dashboard 🖥️]
+
+```
+
+> **Flow:** Sensors → MQTT Broker → Node Server → AI Inference → Node Server → Dashboard UI
+
+---
+
+## 🛠 Tech Stack
+
+| Component | Technology Used | Purpose |
+| --- | --- | --- |
+| **Hardware** | ESP32, ADXL345, QMC5883L | Edge processing & sensing (Vibration, Mag, Sound) |
+| **Communication** | MQTT (HiveMQ), Socket.io | Real-time data telemetry |
+| **Backend** | Node.js, Express | Orchestration & API handling |
+| **AI Brain** | Python, FastAPI, Scikit-learn | Anomaly detection (Isolation Forest) |
+| **Frontend** | React, Recharts, Leaflet | Visualization & Map Interface |
 
 ---
 
 ## ⚙️ Installation & Setup
 
 ### Prerequisites
-* Node.js (v16+)
-* Python (v3.9+)
-* Git
 
 ### 1. Clone the Repository
+
 ```bash
 git clone <your-repo-url>
 cd <your-repo-name>
 
 ```
 
-### 2. Setup Frontend
+### 2. Install Dependencies
+
+**🖥️ Frontend**
 
 ```bash
 cd Software/frontend
@@ -46,7 +90,7 @@ npm install
 
 ```
 
-### 3. Setup Backend (Node.js)
+**⚙️ Backend**
 
 ```bash
 cd ../backend/node-server
@@ -54,11 +98,10 @@ npm install
 
 ```
 
-### 4. Setup AI Service (Python)
+**🧠 AI Service**
 
 ```bash
 cd ai-service
-# It is recommended to create a virtual environment first
 pip install -r requirements.txt
 
 ```
@@ -67,77 +110,126 @@ pip install -r requirements.txt
 
 ## 🏃‍♂️ How to Run
 
-To run the full system, you will need **three separate terminal windows**.
+You need **3 Terminal Windows** running simultaneously.
 
-### Terminal 1: Start AI Service (Python)
-
-This service processes sensor data to detect anomalies.
+#### 1️⃣ Terminal 1: The Brain (AI)
 
 ```bash
-# Navigate to: Software/backend/node-server/ai-service
+# Path: backend/node-server/ai-service
 python -m uvicorn main:app --reload --port 5000
 
 ```
 
-*You should see:* `✅ AI Model Loaded` or `INFO: Uvicorn running on http://127.0.0.1:5000`
+> *Expect:* `✅ AI Model Loaded`
 
-### Terminal 2: Start Backend Server (Node.js)
-
-This acts as the bridge between MQTT, AI, and the Dashboard.
+#### 2️⃣ Terminal 2: The Bridge (Backend)
 
 ```bash
-# Navigate to: Software/backend/node-server
+# Path: backend/node-server
 node index.js
 
 ```
 
-*You should see:* ```
-🚀 Server running on http://localhost:3000
-✅ Connected to MQTT Broker
-📡 Socket Stream Active
+> *Expect:* `🚀 Server running...` and `✅ Connected to MQTT`
 
-```
+#### 3️⃣ Terminal 3: The Face (Frontend)
 
-### Terminal 3: Start Dashboard (Frontend)
-The user interface for monitoring.
 ```bash
-# Navigate to: Software/frontend
+# Path: frontend
 npm run dev
 
 ```
 
-*You should see:* `➜ Local: http://localhost:5173/`
+> *Expect:* `➜ Local: http://localhost:5173/`
 
 ---
 
 ## 🧪 Testing the System
 
-1. **Open Dashboard:** Go to `http://localhost:5173` in your browser.
-2. **Select Mode:**
-* **LIVE:** Connects to your real ESP32 device.
-* **TEST (SIM):** Simulates data if you don't have the hardware connected.
+<div align="center">
+<img src="https://www.google.com/search?q=https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjEx.../placeholder.gif" alt="Add a GIF of your dashboard here" width="600">
 
 
-3. **Trigger Anomaly:**
-* Shake the ESP32 or bring a magnet close to it.
-* The Dashboard graph should spike, and a **Red Alert** marker should appear on the map.
 
 
+
+<em>(Replace this link with a screen recording of your dashboard!)</em>
+</div>
+
+1. Open **`http://localhost:5173`**.
+2. Toggle Mode to **TEST (SIM)** if hardware isn't connected.
+3. **Trigger:** Shake your sensor or click "Simulate Anomaly".
+4. **Observe:** The graph spikes 📈, the Map Marker turns **RED** 🔴, and the Event Log updates.
+
+---
 
 ## 📂 Project Structure
 
-```
+```bash
 Software/
-├── frontend/                 # React Dashboard
-├── backend/
-│   └── node-server/          # Main Server (Express + MQTT)
-│       ├── ai-service/       # Python AI Model (FastAPI)
-│       ├── mqtt/             # MQTT Client Logic
-│       ├── socket/           # WebSocket Logic
-│       └── index.js          # Entry Point
+├── 📂 frontend/          # React Dashboard (Vite)
+│   ├── src/pages/        # Dashboard.jsx
+│   └── src/assets/       # Logos (IR, MakeInIndia)
+├── 📂 backend/
+│   └── 📂 node-server/   # Main Controller
+│       ├── 📂 ai-service/# Python FastAPI (The Brain)
+│       ├── 📂 mqtt/      # MQTT Connection Logic
+│       └── index.js      # Entry Point
 
 ```
 
-## 🚧 Status
+---
 
-**Hackathon Prototype** - Functional MVP with real-time detection and alerting.
+<div align="center">
+<b>Built for Smart India Hackathon / Railway Safety Projects 🇮🇳</b>
+
+
+
+
+<sub>RDSO Compliant Logic • Indigenous Tech</sub>
+</div>
+
+```
+
+-----
+
+### **2. Bonus: "Attractive" Startup Script (`banner.js`)**
+
+You asked for a "js file to it." To make your backend terminal look cool (like a real hacking tool/government system) when you start it, create this file in your backend.
+
+**File:** `backend/node-server/utils/banner.js`
+
+```javascript
+// A simple script to print a cool banner when the server starts
+const printBanner = () => {
+    console.log('\x1b[36m%s\x1b[0m', `
+    ======================================================
+      _____       _ _  _____1uard   
+     |  __ \\     (_) |/ ____|                   
+     | |__) |__ _ _| | |  __ _   _  __ _ _ __ __| |
+     |  _  // _\` | | | | |_ | | | |/ _\` | '__/ _\` |
+     | | \\ \\ (_| | | | |__| | |_| | (_| | | | (_| |
+     |_|  \\_\\__,_|_|_|\\_____|\\__,_|\\__,_|_|  \\__,_|
+                                                    
+     🚆 RAILWAY TAMPERING DETECTION SYSTEM v1.0
+     🇮🇳 MINISTRY OF RAILWAYS | RDSO COMPLIANT
+    ======================================================
+    `);
+    console.log('\x1b[33m%s\x1b[0m', `[INFO] Initializing System Modules...`);
+};
+
+module.exports = printBanner;
+
+```
+
+**How to use it:**
+In your `backend/node-server/index.js`, add this at the very top:
+
+```javascript
+const printBanner = require('./utils/banner'); // Import the file
+
+printBanner(); // Call it before your server starts
+
+// ... rest of your server code ...
+
+```
