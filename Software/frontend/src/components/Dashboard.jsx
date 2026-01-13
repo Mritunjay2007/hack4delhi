@@ -9,6 +9,13 @@ import io from "socket.io-client";
 import axios from "axios";
 import "leaflet/dist/leaflet.css";
 
+// --- IMPORT YOUR LOCAL LOGOS HERE ---
+import IRLogo from "../assets/IRLogo.png"; 
+import MakeInIndiaLogo from "../assets/MakeInIndiaLogo.jpeg"; 
+
+// Fallback Emblem (Online)
+const LOGO_EMBLEM = "https://upload.wikimedia.org/wikipedia/commons/thumb/5/55/Emblem_of_India.svg/240px-Emblem_of_India.svg.png";
+
 // --- ICONS & ASSETS ---
 const getIcon = (color) =>
   new L.DivIcon({
@@ -86,16 +93,15 @@ export default function Dashboard() {
       if (!socket.connected) socket.connect();
       fetchAlerts();
       
-      socket.on("connect", () => addLog("✅ Connected to Backend Stream", "success"));
-      socket.on("disconnect", () => addLog("⚠️ Disconnected from Backend", "error"));
-      socket.on("reconnect", () => addLog("🔄 Connection Restored", "success"));
+      socket.on("connect", () => addLog("Connected to Backend Stream", "success"));
+      socket.on("disconnect", () => addLog("Disconnected from Backend", "error"));
+      socket.on("reconnect", () => addLog("Connection Restored", "success"));
 
       socket.on("sensor_update", (data) => {
         setLastHeartbeat(Date.now());
         setNodes((prev) => ({
           ...prev,
           [data.node_id]: {
-            // Updated Fallback to Station Coordinates
             lat: data.lat || data.latitude || STATION_LAT,
             lng: data.lng || data.longitude || STATION_LNG,
             lastSeen: data.timestamp,
@@ -124,7 +130,7 @@ export default function Dashboard() {
       });
 
       socket.on("new_alert", (newAlert) => {
-        console.log("🔔 RECEIVED ALERT:", newAlert);
+        console.log("RECEIVED ALERT:", newAlert);
         try {
           const audio = new Audio("/alert.mp3");
           audio.play().catch((e) => console.log("Audio block:", e));
@@ -134,7 +140,6 @@ export default function Dashboard() {
             ...newAlert,
             id: newAlert.id || Date.now(),
             nodeId: newAlert.nodeId || newAlert.node_id || "UNKNOWN",
-            // Updated Fallback to Station Coordinates
             lat: newAlert.lat || newAlert.latitude || STATION_LAT,
             lng: newAlert.lng || newAlert.longitude || STATION_LNG,
             status: newAlert.status || 'OPEN'
@@ -166,7 +171,6 @@ export default function Dashboard() {
     } else {
       socket.disconnect();
       setNodes({
-        // Updated Test Nodes to sit on the Railway Lines
         "TEST-NODE-01": { lat: STATION_LAT, lng: STATION_LNG, status: "green", battery: 98, rssi: -45 },
         "TEST-NODE-03": { lat: STATION_LAT - 0.002, lng: STATION_LNG + 0.001, status: "yellow", battery: 40, rssi: -80 },
       });
@@ -186,7 +190,6 @@ export default function Dashboard() {
         const fakeData = {
             node_id: "TEST-NODE-01",
             timestamp: t,
-            // Updated Fake Data to Station Coordinates
             lat: STATION_LAT, lng: STATION_LNG,
             accel_mag: Math.random() * 0.5,
             mag_norm: 45 + Math.cos(t/1000) * 5,
@@ -249,81 +252,37 @@ export default function Dashboard() {
 
   // --- DARK THEME STYLES ---
   const styles = {
-    // Main Container
-    container: { 
-        display: "flex", flexDirection: "column", height: "100vh", width: "100%", overflow: "hidden", 
-        fontFamily: "'Inter', system-ui, sans-serif", backgroundColor: "#0f172a", color: "#e2e8f0" 
+    container: { display: "flex", flexDirection: "column", height: "100vh", width: "100%", overflow: "hidden", fontFamily: "'Inter', system-ui, sans-serif", backgroundColor: "#0f172a", color: "#e2e8f0" },
+    header: { height: "80px", background: "rgba(15, 23, 42, 0.95)", borderBottom: "1px solid #334155", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 24px", flexShrink: 0, zIndex: 50 },
+    
+    // Updated Logo Container - Pure White Background with more space
+    logoContainer: { 
+        display: "flex", alignItems: "center", gap: "16px", 
+        background: "#ffffff", padding: "4px 12px", borderRadius: "8px", marginRight: "16px",
+        boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+        height: "64px" // Increased container height
     },
-    // Header
-    header: { 
-        height: "64px", background: "rgba(30, 41, 59, 0.8)", backdropFilter: "blur(12px)", 
-        borderBottom: "1px solid #334155", display: "flex", alignItems: "center", justifyContent: "space-between", 
-        padding: "0 24px", flexShrink: 0, zIndex: 50 
-    },
-    statusBadge: { 
-        display: "flex", alignItems: "center", gap: "8px", padding: "6px 12px", 
-        background: "rgba(16, 185, 129, 0.1)", border: "1px solid rgba(16, 185, 129, 0.2)", borderRadius: "999px" 
-    },
-    body: { display: "flex", flex: 1, height: "calc(100vh - 64px)", overflow: "hidden", width: "100%" },
+    
+    statusBadge: { display: "flex", alignItems: "center", gap: "8px", padding: "6px 12px", background: "rgba(16, 185, 129, 0.1)", border: "1px solid rgba(16, 185, 129, 0.2)", borderRadius: "999px" },
+    body: { display: "flex", flex: 1, height: "calc(100vh - 80px)", overflow: "hidden", width: "100%" },
     leftPanel: { flex: "0 0 35%", height: "100%", position: "relative", borderRight: "1px solid #334155", zIndex: 10 },
     rightPanel: { flex: 1, display: "flex", flexDirection: "column", height: "100%", backgroundColor: "#020617", overflowY: "auto", minWidth: 0 },
-    
-    // Cards
     kpiRow: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px", padding: "20px" },
-    kpiCard: { 
-        background: "#1e293b", padding: "16px", borderRadius: "12px", 
-        border: "1px solid #334155", boxShadow: '0 4px 6px -1px rgba(0,0,0,0.2)' 
-    },
+    kpiCard: { background: "#1e293b", padding: "16px", borderRadius: "12px", border: "1px solid #334155", boxShadow: '0 4px 6px -1px rgba(0,0,0,0.2)' },
     kpiLabel: { fontSize: "0.75rem", color: "#94a3b8", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.05em" },
     kpiValue: { fontSize: "1.5rem", fontWeight: "700", color: "#f8fafc", marginTop: "8px" },
-    
-    // Alerts
-    alertSection: { 
-        margin: "0 20px 20px 20px", display: "flex", flexDirection: "column", 
-        backgroundColor: "#1e293b", borderRadius: "12px", border: "1px solid #334155", overflow: "hidden", 
-        flexShrink: 0, maxHeight: "40%", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.3)"
-    },
-    alertHeader: { 
-        padding: "16px 20px", borderBottom: "1px solid #334155", display: "flex", 
-        justifyContent: "space-between", alignItems: "center", background: "#1e293b" 
-    },
-    filterPill: (active) => ({ 
-        padding: "6px 14px", borderRadius: "20px", fontSize: "0.75rem", fontWeight: "600", 
-        cursor: "pointer", background: active ? "#3b82f6" : "#334155", color: "white", 
-        border: "none", marginRight: "8px", transition: "all 0.2s" 
-    }),
-    
-    // Graphs
+    alertSection: { margin: "0 20px 20px 20px", display: "flex", flexDirection: "column", backgroundColor: "#1e293b", borderRadius: "12px", border: "1px solid #334155", overflow: "hidden", flexShrink: 0, maxHeight: "40%", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.3)" },
+    alertHeader: { padding: "16px 20px", borderBottom: "1px solid #334155", display: "flex", justifyContent: "space-between", alignItems: "center", background: "#1e293b" },
+    filterPill: (active) => ({ padding: "6px 14px", borderRadius: "20px", fontSize: "0.75rem", fontWeight: "600", cursor: "pointer", background: active ? "#3b82f6" : "#334155", color: "white", border: "none", marginRight: "8px", transition: "all 0.2s" }),
     graphSection: { padding: "0 20px 20px 20px", display: "flex", flexDirection: "column", flex: 1 },
     tabHeader: { display: "flex", gap: "24px", borderBottom: "1px solid #334155", marginBottom: "20px" },
-    tab: (active) => ({ 
-        padding: "0 0 12px 0", cursor: "pointer", fontSize: "0.9rem", fontWeight: "600", 
-        color: active ? "#60a5fa" : "#94a3b8", borderBottom: active ? "3px solid #60a5fa" : "3px solid transparent",
-        transition: "color 0.2s"
-    }),
+    tab: (active) => ({ padding: "0 0 12px 0", cursor: "pointer", fontSize: "0.9rem", fontWeight: "600", color: active ? "#60a5fa" : "#94a3b8", borderBottom: active ? "3px solid #60a5fa" : "3px solid transparent", transition: "color 0.2s" }),
     gridContainer: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" },
-    chartCard: { 
-        background: "#1e293b", borderRadius: "12px", padding: "20px", 
-        border: "1px solid #334155", height: "280px", display: "flex", flexDirection: "column" 
-    },
-    
-    // Footer
-    footer: { 
-        height: "160px", backgroundColor: "#020617", color: "#cbd5e1", display: "flex", 
-        flexDirection: "column", borderTop: "1px solid #334155", flexShrink: 0, 
-        fontFamily: "'JetBrains Mono', 'Courier New', monospace", zIndex: 60 
-    },
+    chartCard: { background: "#1e293b", borderRadius: "12px", padding: "20px", border: "1px solid #334155", height: "280px", display: "flex", flexDirection: "column" },
+    footer: { height: "160px", backgroundColor: "#020617", color: "#cbd5e1", display: "flex", flexDirection: "column", borderTop: "1px solid #334155", flexShrink: 0, fontFamily: "'JetBrains Mono', 'Courier New', monospace", zIndex: 60 },
     consoleBody: { flex: 1, overflowY: "auto", padding: "12px 20px", fontSize: "0.8rem", lineHeight: "1.6" },
-    
-    // Inputs
-    modeSelect: { 
-        padding: "8px 16px", borderRadius: "8px", border: "1px solid #475569", 
-        background: "#0f172a", color: "white", fontWeight: "bold", cursor: "pointer", outline: "none" 
-    },
-    statusSelect: { 
-        padding: "6px 10px", borderRadius: "6px", border: "1px solid #475569", 
-        fontSize: "0.75rem", color: "#e2e8f0", cursor: "pointer", background: "#334155", outline: "none" 
-    },
+    modeSelect: { padding: "8px 16px", borderRadius: "8px", border: "1px solid #475569", background: "#0f172a", color: "white", fontWeight: "bold", cursor: "pointer", outline: "none" },
+    statusSelect: { padding: "6px 10px", borderRadius: "6px", border: "1px solid #475569", fontSize: "0.75rem", color: "#e2e8f0", cursor: "pointer", background: "#334155", outline: "none" },
   };
 
   return (
@@ -346,16 +305,35 @@ export default function Dashboard() {
         .custom-marker svg:hover { transform: scale(1.1); }
       `}</style>
 
-      {/* HEADER */}
+      {/* HEADER WITH OFFICIAL LOGOS */}
       <header style={styles.header}>
-        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-          <div style={{ width: "40px", height: "40px", background: "linear-gradient(135deg, #3b82f6, #8b5cf6)", borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.5rem", boxShadow: "0 4px 10px rgba(59,130,246,0.3)" }}>🚄</div>
+        <div style={{ display: "flex", alignItems: "center", gap: "24px" }}>
+          {/* Logo Section - Now on White Background */}
+          <div style={styles.logoContainer}>
+             <img src={LOGO_EMBLEM} alt="Government of India" style={{ height: "100%", width: "auto" }} />
+             <div style={{width: "1px", height: "40px", background: "#cbd5e1"}}></div>
+             {/* INCREASED IR LOGO SIZE */}
+             <img src={IRLogo} alt="Indian Railways" style={{ height: "60px", width: "auto" }} onError={(e) => {e.target.onerror = null; e.target.src="https://via.placeholder.com/50"}}/>
+          </div>
+          
+          {/* Title Section */}
           <div>
-            <h1 style={{ fontSize: "1.25rem", fontWeight: "800", letterSpacing: "-0.02em", background: "linear-gradient(to right, #fff, #94a3b8)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>RailGuard Command</h1>
-            <div style={{ fontSize: "0.75rem", color: "#64748b", fontWeight: "500" }}>AI-POWERED SECURITY INTERFACE</div>
+            <h1 style={{ fontSize: "1.4rem", fontWeight: "800", letterSpacing: "-0.02em", color: "#f8fafc", margin: 0, lineHeight: 1 }}>RailGuard Command</h1>
+            <div style={{ fontSize: "0.7rem", color: "#94a3b8", fontWeight: "600", marginTop: "4px", letterSpacing: "0.05em" }}>
+                MINISTRY OF RAILWAYS | RDSO COMPLIANT
+            </div>
           </div>
         </div>
+
+        {/* Right Controls */}
         <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
+          {/* Make in India Badge - INCREASED SIZE */}
+          <div style={{ background: "white", padding: "4px 12px", borderRadius: "6px", display: "flex", alignItems: "center", height: "55px" }}>
+             <img src={MakeInIndiaLogo} alt="Make In India" style={{ height: "100%", width: "auto" }} onError={(e) => {e.target.onerror = null; e.target.src="https://via.placeholder.com/50"}} />
+          </div>
+          
+          <div style={{ width: "1px", height: "30px", background: "#475569" }}></div>
+          
           <select style={styles.modeSelect} value={mode} onChange={(e) => setMode(e.target.value)}>
             <option value="LIVE">LIVE SENSORS</option>
             <option value="TEST">TEST MODE (SIM)</option>
@@ -371,7 +349,7 @@ export default function Dashboard() {
 
       {/* BODY */}
       <div style={styles.body}>
-        {/* LEFT: MAP */}
+        {/* LEFT: MAP (LIGHT THEME) */}
         <div style={styles.leftPanel}>
           <MapContainer center={[STATION_LAT, STATION_LNG]} zoom={16} zoomControl={false} style={{ height: "100%" }}>
             {/* 1. Base Layer: Standard Light OSM */}
@@ -399,16 +377,16 @@ export default function Dashboard() {
                     <div style={{ fontSize: "0.85rem", marginBottom: "8px" }}><b>Severity:</b> <span style={{ fontWeight: "bold", color: "#ef4444" }}>{alert.severity}</span></div>
                     <hr style={{ margin: "8px 0", borderTop: "1px solid #e2e8f0" }} />
                     {alert.status === "CONSTRUCTION" ? (
-                      <div style={{ background: "#fef3c7", padding: "6px", borderRadius: "6px", color: "#b45309", fontSize: "0.75rem", textAlign: "center", fontWeight: "600" }}>🚧 Construction Verified</div>
+                      <div style={{ background: "#fef3c7", padding: "6px", borderRadius: "6px", color: "#b45309", fontSize: "0.75rem", textAlign: "center", fontWeight: "600" }}>Construction Verified</div>
                     ) : alert.status === "CLOSED" ? (
-                      <div style={{ background: "#dcfce7", padding: "6px", borderRadius: "6px", color: "#166534", fontSize: "0.75rem", textAlign: "center", fontWeight: "600" }}>✅ Resolved / Closed</div>
+                      <div style={{ background: "#dcfce7", padding: "6px", borderRadius: "6px", color: "#166534", fontSize: "0.75rem", textAlign: "center", fontWeight: "600" }}>Resolved / Closed</div>
                     ) : (
                       <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                         <label style={{ fontSize: "0.75rem", color: "#64748b", fontWeight: "600" }}>IMMEDIATE ACTION:</label>
                         <select style={{ padding: "6px", borderRadius: "4px", border: "1px solid #cbd5e1", cursor: "pointer", width: "100%" }} onChange={(e) => handleResolutionChange(alert.id, e.target.value)} defaultValue="">
                           <option value="" disabled>Select Resolution...</option>
                           <option value="CONSTRUCTION">🚧 Verify Construction</option>
-                          <option value="CLOSED">✅ Close Alert</option>
+                          <option value="CLOSED">Close Alert</option>
                         </select>
                       </div>
                     )}
