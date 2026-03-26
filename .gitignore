@@ -16,4 +16,5 @@ venv/
 # backend/node-server/.env
 backend/node-server/.env
 
+backend/node-server/private/captures/*
 # Documents/prototype/*

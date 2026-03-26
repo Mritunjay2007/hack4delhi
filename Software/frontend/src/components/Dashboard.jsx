@@ -16,7 +16,7 @@ import {
 } from "recharts";
 import L from "leaflet";
 import axios from "axios";
-import { io } from "socket.io-client"; // <-- BRING BACK SOCKET.IO
+import { io } from "socket.io-client";
 import "leaflet/dist/leaflet.css";
 
 // --- IMPORT YOUR LOCAL LOGOS HERE ---
@@ -58,7 +58,7 @@ const icons = {
 };
 
 // --- API CONFIGURATION ---
-const NODE_SERVER_URL = "http://localhost:3000"; // <-- POINT TO NODE.JS
+const NODE_SERVER_URL = "http://localhost:3000";
 const API_URL = "http://localhost:3000/api/alerts";
 
 // --- STATION COORDINATES (New Delhi Railway Station) ---
@@ -66,6 +66,8 @@ const STATION_LAT = 28.6427;
 const STATION_LNG = 77.2207;
 
 export default function Dashboard() {
+  const lastVisionTriggerTime = useRef(0);
+
   // --- STATE ---
   const [mode, setMode] = useState("LIVE");
   const [nodes, setNodes] = useState({});
@@ -74,17 +76,33 @@ export default function Dashboard() {
   const [selectedNode, setSelectedNode] = useState(null);
   const [lastHeartbeat, setLastHeartbeat] = useState(Date.now());
 
-  // --- VISION STATE & REFS ---
+  // --- VISION STATE (Backend-driven) ---
+  const [visionResult, setVisionResult] = useState(null);
+  const [visionStatus, setVisionStatus] = useState("idle"); // 'idle' | 'analyzing' | 'done'
   const [cameraActive, setCameraActive] = useState(false);
-  const [visionVerdict, setVisionVerdict] = useState(null);
+
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
+  const socketRef = useRef(null);
+
+  // --- FIX: REFS TO PREVENT CAMERA RESTART LOOPS ---
+  const telemetryRef = useRef(telemetry);
+  const selectedNodeRef = useRef(selectedNode);
+
+  useEffect(() => {
+    telemetryRef.current = telemetry;
+  }, [telemetry]);
+
+  useEffect(() => {
+    selectedNodeRef.current = selectedNode;
+  }, [selectedNode]);
 
   // UX State
   const [activeTab, setActiveTab] = useState("telemetry");
   const [filterStatus, setFilterStatus] = useState("ALL");
   const [replayMode, setReplayMode] = useState(false);
   const [replayIndex, setReplayIndex] = useState(50);
+  const [history, setHistory] = useState([]);
 
   // Logging State
   const [systemLogs, setSystemLogs] = useState([
@@ -99,7 +117,12 @@ export default function Dashboard() {
   const addLog = (msg, type = "info") => {
     setSystemLogs((prev) =>
       [
-        { id: Date.now(), time: new Date().toLocaleTimeString(), type, msg },
+        {
+          id: `${Date.now()}-${Math.random()}`,
+          time: new Date().toLocaleTimeString(),
+          type,
+          msg,
+        },
         ...prev,
       ].slice(0, 50),
     );
@@ -113,11 +136,17 @@ export default function Dashboard() {
     setSystemLogs([]);
     addLog(`Switched to ${mode} MODE`, "warning");
 
+    // Initial History Fetch
+    axios
+      .get(`${NODE_SERVER_URL}/api/history`)
+      .then((res) => setHistory(res.data))
+      .catch(() => console.error("Failed to load history"));
+
     let socket = null;
 
     if (mode === "LIVE") {
-      // 1. Connect to the Node.js Socket.io Server
       socket = io(NODE_SERVER_URL);
+      socketRef.current = socket;
 
       socket.on("connect", () => {
         addLog("Connected to Node.js Data Stream", "success");
@@ -127,11 +156,9 @@ export default function Dashboard() {
         addLog("Disconnected from Backend", "error");
       });
 
-      // 2. Handle incoming Telemetry (Passed through from Python)
       socket.on("sensor_update", (data) => {
         setLastHeartbeat(Date.now());
 
-        // A. Update Node Map State
         setNodes((prev) => ({
           ...prev,
           [data.node_id]: {
@@ -148,7 +175,6 @@ export default function Dashboard() {
           },
         }));
 
-        // B. Update Telemetry Graphs
         setTelemetry((prev) => {
           const newPoint = {
             time: new Date(data.timestamp).toLocaleTimeString(),
@@ -163,42 +189,75 @@ export default function Dashboard() {
             frequency: data.frequency || 0,
             anomaly_score: data.anomaly_score,
           };
-          return [...prev, newPoint].slice(-50); // Keep last 50 points
+          return [...prev, newPoint].slice(-50);
         });
       });
 
-      // 3. Handle Alerts
       socket.on("new_alert", (newAlert) => {
         setAlerts((prev) => {
-          // Prevent duplicate alerts
           if (prev.find((a) => a.id === newAlert.id)) return prev;
-
-          // Play sound for new alerts
           try {
             new Audio("/alert.mp3").play().catch(() => {});
           } catch (e) {}
-
-          addLog(
-            `🚨 ANOMALY: Node ${newAlert.nodeId} | Severity: ${newAlert.severity}`,
-            "error",
-          );
           return [newAlert, ...prev];
         });
 
-        // --- UPDATED: TRIGGER CAMERA FOR MEDIUM, HIGH, AND CRITICAL ---
-        if (["MEDIUM", "HIGH", "CRITICAL"].includes(newAlert.severity)) {
-          // 1. Switch the tab immediately to start mounting the Video HTML
-          setActiveTab("vision");
+        const now = Date.now();
+        const VISION_COOLDOWN = 30000;
 
-          // 2. Wait 300 milliseconds for React to finish drawing the screen, THEN turn on the camera
-          setTimeout(() => {
-            setCameraActive(true);
-          }, 300);
+        if (["MEDIUM", "HIGH", "CRITICAL"].includes(newAlert.severity)) {
+          if (now - lastVisionTriggerTime.current > VISION_COOLDOWN) {
+            lastVisionTriggerTime.current = now;
+            addLog(
+              `🚨 Anomaly ${newAlert.nodeId}: Waking local camera for verification...`,
+              "warning",
+            );
+
+            setActiveTab("vision");
+            setVisionStatus("analyzing");
+            setVisionResult(null);
+
+            // Wake the local webcam
+            setTimeout(() => setCameraActive(true), 300);
+          } else {
+            addLog("Vision API is on cooldown to prevent rate limits.", "info");
+          }
         }
+      });
+
+      socket.on("vision_result", (result) => {
+        setVisionResult(result);
+        setVisionStatus("done");
+
+        addLog(
+          `Vision ML [${result.node_id}]: ${result.reason} (${result.confidence}%)`,
+          result.confirmed ? "error" : "success",
+        );
+
+        setActiveTab("vision");
+      });
+
+      socket.on("vision_verdict", (verdict) => {
+        setVisionResult({
+          confirmed: verdict.confirmed,
+          confidence: verdict.confidence,
+          reason: verdict.reason,
+          node_id: verdict.node_id,
+          timestamp: verdict.timestamp,
+        });
+        setVisionStatus("done");
+        addLog(
+          `Backend AI Verdict: ${verdict.reason}`,
+          verdict.confirmed ? "error" : "success",
+        );
+        setActiveTab("vision");
+      });
+
+      socket.on("new_detection", (detection) => {
+        setHistory((prev) => [detection, ...prev].slice(0, 20));
       });
     } else {
       if (socket) socket.disconnect();
-      // TEST MODE SETUP ...
       setNodes({
         "TEST-NODE-01": {
           lat: STATION_LAT,
@@ -222,6 +281,83 @@ export default function Dashboard() {
       if (socket) socket.disconnect();
     };
   }, [mode]);
+
+  // --- HYBRID CAMERA & UPLOAD LOGIC ---
+  useEffect(() => {
+    let stream = null;
+    let captureInterval = null;
+
+    const captureAndUpload = async () => {
+      if (videoRef.current && canvasRef.current && cameraActive) {
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        // Compress to ensure fast upload to backend
+        const base64Image = canvas.toDataURL("image/jpeg", 0.6);
+        
+        // FIX: Pull from refs so we don't trigger re-renders
+        const currentTelemetry = telemetryRef.current;
+        const currentNode = selectedNodeRef.current;
+        const latestReading = currentTelemetry.length > 0 ? currentTelemetry[currentTelemetry.length - 1] : {};
+
+        try {
+          addLog(
+            "Frame captured. Uploading to Backend AI Orchestrator...",
+            "info",
+          );
+
+          const res = await axios.post(`${NODE_SERVER_URL}/api/vision`, {
+            image_base64: base64Image,
+            node_id: currentNode || latestReading.node_id || "TRACK_SEC_42",
+            telemetry: latestReading,
+            alert_id: `ALT-${Date.now()}`,
+          });
+
+          if (res.data.status === "throttled") {
+            addLog(
+              "Backend AI is busy (Flood Protection). Try again shortly.",
+              "warning",
+            );
+            setVisionStatus("idle");
+          }
+        } catch (error) {
+          addLog(`Failed to upload frame to Backend: ${error.message}`, "error");
+          setVisionStatus("idle");
+        }
+      }
+    };
+
+    if (cameraActive) {
+      navigator.mediaDevices
+        .getUserMedia({ video: true })
+        .then((mediaStream) => {
+          stream = mediaStream;
+          if (videoRef.current) videoRef.current.srcObject = stream;
+
+          // Give camera 2s to focus/adjust lighting, then take picture
+          captureInterval = setTimeout(captureAndUpload, 2000);
+
+          // Turn off camera shortly after capture to save resources
+          setTimeout(() => setCameraActive(false), 5000);
+        })
+        .catch((err) => {
+          console.error("Camera error", err);
+          setCameraActive(false);
+          setVisionStatus("idle");
+          addLog("Local camera access denied.", "error");
+        });
+    }
+
+    return () => {
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+      clearTimeout(captureInterval);
+    };
+  }, [cameraActive]); // FIX: Removed telemetry and selectedNode to prevent loop!
 
   // --- SIMULATION MODE LOGIC ---
   useEffect(() => {
@@ -250,79 +386,6 @@ export default function Dashboard() {
     }, 500);
     return () => clearInterval(interval);
   }, [mode]);
-
-  // --- CAMERA & VLM LOGIC ---
-  useEffect(() => {
-    let stream = null;
-    let captureInterval = null;
-
-    const captureAndAnalyze = async () => {
-      if (videoRef.current && canvasRef.current) {
-        const video = videoRef.current;
-        const canvas = canvasRef.current;
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const base64Image = canvas.toDataURL("image/jpeg", 0.8);
-
-        // --- NEW: Get context to send to backend for the email report ---
-        const latestReading = telemetry.length > 0 ? telemetry[telemetry.length - 1] : {};
-
-        try {
-          addLog("Sending frame to Gemini VLM for analysis...", "info");
-          const res = await axios.post("http://localhost:3000/api/vision", {
-            alert_id: `ALT-${Date.now()}`,
-            image_base64: base64Image,
-            // Pass these so the backend can include them in the email
-            node_id: selectedNode || latestReading.node_id || "TRACK_SEC_42",
-            telemetry: latestReading 
-          });
-
-          if (res.data.status === "success") {
-            setVisionVerdict({
-              confirmed: res.data.visual_confirmation,
-              confidence: res.data.confidence,
-              reason: res.data.reason,
-            });
-            addLog(
-              `Vision ML: ${res.data.reason} (${res.data.confidence}%)`,
-              res.data.visual_confirmation ? "error" : "success",
-            );
-          }
-        } catch (error) {
-          console.error("Vision API Error:", error);
-          addLog("Vision API request failed.", "error");
-        }
-      }
-    };
-
-    if (cameraActive) {
-      setVisionVerdict(null);
-      navigator.mediaDevices
-        .getUserMedia({ video: true })
-        .then((mediaStream) => {
-          stream = mediaStream;
-          if (videoRef.current) videoRef.current.srcObject = stream;
-
-          // Wait 2 seconds for camera to adjust exposure, then capture
-          captureInterval = setTimeout(captureAndAnalyze, 2000);
-
-          // Power down camera after 15 seconds to simulate power saving
-          setTimeout(() => setCameraActive(false), 15000);
-        })
-        .catch((err) => {
-          console.error("Camera error", err);
-          setCameraActive(false);
-        });
-    }
-
-    return () => {
-      if (stream) stream.getTracks().forEach((track) => track.stop());
-      clearTimeout(captureInterval);
-    };
-  }, [cameraActive]);
 
   // --- ACTIONS ---
   const fetchAlerts = async () => {
@@ -592,6 +655,13 @@ export default function Dashboard() {
       background: "#334155",
       outline: "none",
     },
+    historyItem: (confirmed) => ({
+      padding: "10px",
+      borderRadius: "8px",
+      background: "#1e293b",
+      borderLeft: confirmed ? "4px solid #ef4444" : "4px solid #10b981",
+      marginBottom: "10px",
+    }),
   };
 
   return (
@@ -604,6 +674,7 @@ export default function Dashboard() {
         ::-webkit-scrollbar-thumb:hover { background: #64748b; }
         .status-dot { width: 8px; height: 8px; background: #10b981; border-radius: 50%; animation: pulse 2s infinite; }
         @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(16,185,129,0.7); } 70% { box-shadow: 0 0 0 6px rgba(16,185,129,0); } 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); } }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         .leaflet-container { background: #cbd5e1; }
         .btn-action { padding: 6px 12px; border: none; background: #3b82f6; border-radius: 6px; font-size: 0.75rem; font-weight: 600; color: white; cursor: pointer; transition: all 0.2s; }
         .btn-action:hover { background: #2563eb; transform: translateY(-1px); }
@@ -612,12 +683,18 @@ export default function Dashboard() {
         input[type=range] { width: 120px; cursor: pointer; accent-color: #3b82f6; }
         .custom-marker { background: transparent; border: none; }
         .custom-marker svg:hover { transform: scale(1.1); }
+        .vision-analyzing-ring {
+          width: 80px; height: 80px;
+          border: 3px solid #334155;
+          border-top-color: #f59e0b;
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+        }
       `}</style>
 
       {/* HEADER WITH OFFICIAL LOGOS */}
       <header style={styles.header}>
         <div style={{ display: "flex", alignItems: "center", gap: "24px" }}>
-          {/* Logo Section */}
           <div style={styles.logoContainer}>
             <img
               src={LOGO_EMBLEM}
@@ -638,7 +715,6 @@ export default function Dashboard() {
             />
           </div>
 
-          {/* Title Section */}
           <div>
             <h1
               style={{
@@ -701,6 +777,7 @@ export default function Dashboard() {
             <option value="LIVE">LIVE SENSORS</option>
             <option value="TEST">TEST MODE (SIM)</option>
           </select>
+
           {mode === "TEST" && (
             <button
               style={{
@@ -734,13 +811,21 @@ export default function Dashboard() {
                   "TEST-NODE-01": { ...prev["TEST-NODE-01"], status: "red" },
                 }));
 
+                // Trigger real webcam + backend flow
                 setActiveTab("vision");
-                setCameraActive(true);
+                setVisionStatus("analyzing");
+                setVisionResult(null);
+                setCameraActive(true); 
+                addLog(
+                  "Simulating threat. Activating local camera for Backend AI processing...",
+                  "warning",
+                );
               }}
             >
               🚨 SIMULATE THREAT
             </button>
           )}
+
           <div style={styles.statusBadge}>
             <div
               className="status-dot"
@@ -1025,61 +1110,20 @@ export default function Dashboard() {
                   }}
                 >
                   <tr>
-                    <th
-                      style={{
-                        textAlign: "left",
-                        padding: "12px 20px",
-                        fontSize: "0.7rem",
-                        color: "#64748b",
-                        borderBottom: "1px solid #334155",
-                      }}
-                    >
-                      TIME
-                    </th>
-                    <th
-                      style={{
-                        textAlign: "left",
-                        padding: "12px 20px",
-                        fontSize: "0.7rem",
-                        color: "#64748b",
-                        borderBottom: "1px solid #334155",
-                      }}
-                    >
-                      NODE ID
-                    </th>
-                    <th
-                      style={{
-                        textAlign: "left",
-                        padding: "12px 20px",
-                        fontSize: "0.7rem",
-                        color: "#64748b",
-                        borderBottom: "1px solid #334155",
-                      }}
-                    >
-                      LOCATION
-                    </th>
-                    <th
-                      style={{
-                        textAlign: "left",
-                        padding: "12px 20px",
-                        fontSize: "0.7rem",
-                        color: "#64748b",
-                        borderBottom: "1px solid #334155",
-                      }}
-                    >
-                      SEVERITY
-                    </th>
-                    <th
-                      style={{
-                        textAlign: "right",
-                        padding: "12px 20px",
-                        fontSize: "0.7rem",
-                        color: "#64748b",
-                        borderBottom: "1px solid #334155",
-                      }}
-                    >
-                      RESPONSE
-                    </th>
+                    {["TIME", "NODE ID", "LOCATION", "SEVERITY", "RESPONSE"].map((h, i) => (
+                      <th
+                        key={h}
+                        style={{
+                          textAlign: i === 4 ? "right" : "left",
+                          padding: "12px 20px",
+                          fontSize: "0.7rem",
+                          color: "#64748b",
+                          borderBottom: "1px solid #334155",
+                        }}
+                      >
+                        {h}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
@@ -1133,14 +1177,16 @@ export default function Dashboard() {
                             borderRadius: "6px",
                             fontSize: "0.7rem",
                             fontWeight: "bold",
-                            background:
-                              ["MEDIUM", "HIGH", "CRITICAL"].includes(alert.severity)
-                                ? "rgba(239, 68, 68, 0.2)"
-                                : "rgba(245, 158, 11, 0.2)",
-                            color:
-                              ["MEDIUM", "HIGH", "CRITICAL"].includes(alert.severity)
-                                ? "#fca5a5"
-                                : "#fcd34d",
+                            background: ["MEDIUM", "HIGH", "CRITICAL"].includes(
+                              alert.severity,
+                            )
+                              ? "rgba(239, 68, 68, 0.2)"
+                              : "rgba(245, 158, 11, 0.2)",
+                            color: ["MEDIUM", "HIGH", "CRITICAL"].includes(
+                              alert.severity,
+                            )
+                              ? "#fca5a5"
+                              : "#fcd34d",
                             border: `1px solid ${["MEDIUM", "HIGH", "CRITICAL"].includes(alert.severity) ? "rgba(239, 68, 68, 0.4)" : "rgba(245, 158, 11, 0.4)"}`,
                           }}
                         >
@@ -1242,7 +1288,28 @@ export default function Dashboard() {
                 onClick={() => setActiveTab("vision")}
               >
                 VISION FEED (AI)
+                {visionStatus === "analyzing" && (
+                  <span
+                    style={{
+                      display: "inline-block",
+                      marginLeft: "8px",
+                      width: "8px",
+                      height: "8px",
+                      borderRadius: "50%",
+                      background: "#f59e0b",
+                      animation: "pulse 1s infinite",
+                      verticalAlign: "middle",
+                    }}
+                  />
+                )}
               </span>
+              <span
+                style={styles.tab(activeTab === "history")}
+                onClick={() => setActiveTab("history")}
+              >
+                DETECTION HISTORY
+              </span>
+              
               <div
                 style={{
                   marginLeft: "auto",
@@ -1703,129 +1770,101 @@ export default function Dashboard() {
                 </div>
               </div>
             ) : activeTab === "vision" ? (
-              /* --- VISION UI --- */
+              /* --- VISION UI: RESULTS DISPLAY + PIP CAMERA --- */
               <div
                 style={{
                   ...styles.chartCard,
                   height: "400px",
-                  border: cameraActive
-                    ? "2px solid #ef4444"
-                    : "1px solid #334155",
+                  position: "relative",
+                  border:
+                    visionStatus === "analyzing"
+                      ? "2px solid #f59e0b"
+                      : visionResult?.confirmed
+                        ? "2px solid #ef4444"
+                        : visionResult
+                          ? "2px solid #10b981"
+                          : "1px solid #334155",
+                  transition: "border-color 0.4s ease",
                 }}
               >
+                <canvas ref={canvasRef} style={{ display: "none" }} />
+                
+                {/* Picture-in-Picture Local Camera Feed */}
+                {cameraActive && (
+                  <div style={{ position: "absolute", top: 10, right: 10, width: "150px", height: "100px", borderRadius: "8px", overflow: "hidden", border: "2px solid #3b82f6", zIndex: 10 }}>
+                    <video ref={videoRef} autoPlay playsInline muted style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    <div style={{ position: "absolute", bottom: 0, background: "rgba(0,0,0,0.6)", width: "100%", fontSize: "0.6rem", textAlign: "center", color: "white", padding: "2px" }}>Capturing...</div>
+                  </div>
+                )}
+
+                {/* Header */}
                 <div
                   style={{
                     display: "flex",
                     justifyContent: "space-between",
-                    marginBottom: "15px",
+                    alignItems: "center",
+                    marginBottom: "20px",
                   }}
                 >
                   <div
                     style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "10px",
                       fontSize: "0.85rem",
                       fontWeight: "700",
-                      color: cameraActive ? "#ef4444" : "#94a3b8",
+                      color:
+                        visionStatus === "analyzing"
+                          ? "#f59e0b"
+                          : visionResult?.confirmed
+                            ? "#ef4444"
+                            : visionResult
+                              ? "#10b981"
+                              : "#94a3b8",
                     }}
                   >
                     <span
-                      className="status-dot"
                       style={{
                         display: "inline-block",
-                        marginRight: "8px",
-                        background: cameraActive ? "#ef4444" : "#64748b",
-                        animation: cameraActive ? "pulse 1s infinite" : "none",
+                        width: "8px",
+                        height: "8px",
+                        borderRadius: "50%",
+                        background:
+                          visionStatus === "analyzing"
+                            ? "#f59e0b"
+                            : visionResult?.confirmed
+                              ? "#ef4444"
+                              : visionResult
+                                ? "#10b981"
+                                : "#475569",
+                        animation:
+                          visionStatus === "analyzing"
+                            ? "pulse 1s infinite"
+                            : "none",
                       }}
-                    ></span>
-                    WAKE-ON-THREAT CAMERA
+                    />
+                    BACKEND VISION ANALYSIS
                   </div>
-                  <div style={{ fontSize: "0.7rem", color: "#94a3b8" }}>
-                    GEMINI 1.5 FLASH (VLM)
+                  <div style={{ fontSize: "0.7rem", color: "#94a3b8", marginRight: cameraActive ? "160px" : "0" }}>
+                    GEMINI 1.5 FLASH (VLM) — SERVER-SIDE
                   </div>
                 </div>
 
+                {/* Content area */}
                 <div
                   style={{
                     flex: 1,
-                    backgroundColor: "#000",
-                    borderRadius: "8px",
-                    overflow: "hidden",
-                    position: "relative",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
+                    flexDirection: "column",
+                    gap: "24px",
+                    background: "rgba(0,0,0,0.3)",
+                    borderRadius: "10px",
+                    padding: "32px",
                   }}
                 >
-                  {/* Hidden Canvas for taking snapshots */}
-                  <canvas ref={canvasRef} style={{ display: "none" }} />
-
-                  {cameraActive ? (
-                    <>
-                      <video
-                        ref={videoRef}
-                        autoPlay
-                        playsInline
-                        muted
-                        style={{
-                          width: "100%",
-                          height: "100%",
-                          objectFit: "cover",
-                        }}
-                      />
-
-                      {/* ML Verdict Overlay --- RE-ORDERED FOR VISIBILITY --- */}
-                      {visionVerdict && (
-                        <div
-                          style={{
-                            position: "absolute",
-                            bottom: "20px",
-                            left: "50%",
-                            transform: "translateX(-50%)",
-                            background: visionVerdict.confirmed
-                              ? "rgba(239, 68, 68, 0.95)"
-                              : "rgba(16, 185, 129, 0.95)",
-                            padding: "12px 24px",
-                            borderRadius: "8px",
-                            color: "white",
-                            textAlign: "center",
-                            boxShadow: "0 4px 6px rgba(0,0,0,0.5)",
-                            zIndex: 100
-                          }}
-                        >
-                          <div
-                            style={{
-                              fontSize: "1.2rem",
-                              fontWeight: "bold",
-                              marginBottom: "4px",
-                            }}
-                          >
-                            {visionVerdict.confirmed
-                              ? "⚠️ SABOTAGE DETECTED"
-                              : "✅ VISUAL CLEAR"}
-                          </div>
-                          <div
-                            style={{
-                              fontSize: "0.85rem",
-                              opacity: 0.9,
-                              marginBottom: "4px",
-                            }}
-                          >
-                            AI Confidence: {visionVerdict.confidence}%
-                          </div>
-                          <div
-                            style={{
-                              fontSize: "0.8rem",
-                              fontStyle: "italic",
-                              background: "rgba(0,0,0,0.2)",
-                              padding: "4px 8px",
-                              borderRadius: "4px",
-                            }}
-                          >
-                            "{visionVerdict.reason}"
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  ) : (
+                  {visionStatus === "idle" && (
                     <div
                       style={{
                         color: "#475569",
@@ -1833,13 +1872,240 @@ export default function Dashboard() {
                         fontFamily: "monospace",
                       }}
                     >
-                      <div style={{ fontSize: "2rem", marginBottom: "8px" }}>
-                        💤
+                      <div style={{ fontSize: "2.5rem", marginBottom: "12px" }}>
+                        🔍
                       </div>
-                      CAMERA IN DEEP SLEEP
+                      <div style={{ fontSize: "0.9rem", color: "#64748b" }}>
+                        Awaiting threat detection
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "0.75rem",
+                          color: "#334155",
+                          marginTop: "6px",
+                        }}
+                      >
+                        Vision analysis runs automatically on the backend
+                        <br />
+                        when a MEDIUM / HIGH / CRITICAL alert is triggered.
+                      </div>
+                    </div>
+                  )}
+
+                  {visionStatus === "analyzing" && (
+                    <div style={{ textAlign: "center" }}>
+                      <div
+                        className="vision-analyzing-ring"
+                        style={{ margin: "0 auto 20px" }}
+                      />
+                      <div
+                        style={{
+                          fontSize: "1rem",
+                          fontWeight: "700",
+                          color: "#f59e0b",
+                          marginBottom: "8px",
+                        }}
+                      >
+                        ANALYSIS IN PROGRESS
+                      </div>
+                      <div
+                        style={{ fontSize: "0.8rem", color: "#64748b", fontFamily: "monospace" }}
+                      >
+                        Uploading local frame to Backend orchestrator...
+                        <br />
+                        Sending to Gemini VLM for inference...
+                      </div>
+                    </div>
+                  )}
+
+                  {visionStatus === "done" && visionResult && (
+                    <div style={{ width: "100%", textAlign: "center" }}>
+                      {/* Main verdict banner */}
+                      <div
+                        style={{
+                          background: visionResult.confirmed
+                            ? "rgba(239, 68, 68, 0.15)"
+                            : "rgba(16, 185, 129, 0.15)",
+                          border: `1px solid ${visionResult.confirmed ? "rgba(239,68,68,0.4)" : "rgba(16,185,129,0.4)"}`,
+                          borderRadius: "10px",
+                          padding: "20px 28px",
+                          marginBottom: "20px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: "1.8rem",
+                            marginBottom: "8px",
+                          }}
+                        >
+                          {visionResult.confirmed ? "⚠️" : "✅"}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: "1.1rem",
+                            fontWeight: "800",
+                            color: visionResult.confirmed ? "#fca5a5" : "#6ee7b7",
+                            letterSpacing: "0.05em",
+                            marginBottom: "6px",
+                          }}
+                        >
+                          {visionResult.confirmed
+                            ? "THREAT VISUALLY CONFIRMED"
+                            : "VISUAL CHECK CLEAR"}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: "0.85rem",
+                            color: "#94a3b8",
+                            fontStyle: "italic",
+                          }}
+                        >
+                          "{visionResult.reason}"
+                        </div>
+                      </div>
+
+                      {/* Meta row */}
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "center",
+                          gap: "32px",
+                          fontSize: "0.8rem",
+                          color: "#64748b",
+                        }}
+                      >
+                        <div>
+                          <span style={{ color: "#94a3b8", fontWeight: "600" }}>
+                            AI CONFIDENCE
+                          </span>
+                          <br />
+                          <span
+                            style={{
+                              fontSize: "1.2rem",
+                              fontWeight: "700",
+                              color: visionResult.confirmed ? "#fca5a5" : "#6ee7b7",
+                            }}
+                          >
+                            {visionResult.confidence}%
+                          </span>
+                        </div>
+                        <div>
+                          <span style={{ color: "#94a3b8", fontWeight: "600" }}>
+                            NODE
+                          </span>
+                          <br />
+                          <span
+                            style={{
+                              fontSize: "1rem",
+                              fontWeight: "700",
+                              color: "#f8fafc",
+                              fontFamily: "monospace",
+                            }}
+                          >
+                            {visionResult.node_id}
+                          </span>
+                        </div>
+                        <div>
+                          <span style={{ color: "#94a3b8", fontWeight: "600" }}>
+                            ANALYSED AT
+                          </span>
+                          <br />
+                          <span
+                            style={{
+                              fontSize: "0.9rem",
+                              fontWeight: "600",
+                              color: "#cbd5e1",
+                              fontFamily: "monospace",
+                            }}
+                          >
+                            {visionResult.timestamp
+                              ? new Date(visionResult.timestamp).toLocaleTimeString()
+                              : "—"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Dismiss / Reset */}
+                      <button
+                        style={{
+                          marginTop: "20px",
+                          padding: "8px 20px",
+                          background: "#1e293b",
+                          border: "1px solid #334155",
+                          borderRadius: "6px",
+                          color: "#94a3b8",
+                          fontSize: "0.75rem",
+                          cursor: "pointer",
+                          fontWeight: "600",
+                        }}
+                        onClick={() => {
+                          setVisionResult(null);
+                          setVisionStatus("idle");
+                        }}
+                      >
+                        CLEAR RESULT
+                      </button>
                     </div>
                   )}
                 </div>
+              </div>
+            ) : activeTab === "history" ? (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "15px",
+                  maxHeight: "500px",
+                  overflowY: "auto",
+                }}
+              >
+                {history.length > 0 ? (
+                  history.map((item) => (
+                    <div
+                      key={item.id}
+                      style={styles.historyItem(item.confirmed)}
+                    >
+                      <img
+                        src={item.imageUrl}
+                        alt="Forensic"
+                        style={{
+                          width: "100%",
+                          height: "120px",
+                          objectFit: "cover",
+                          borderRadius: "4px",
+                        }}
+                      />
+                      <div style={{ marginTop: "10px", fontSize: "0.75rem" }}>
+                        <p>
+                          <strong>Node:</strong> {item.node_id} |{" "}
+                          <strong>Confidence:</strong> {item.confidence}%
+                        </p>
+                        <p
+                          style={{
+                            color: "#94a3b8",
+                            fontStyle: "italic",
+                            marginTop: "4px",
+                          }}
+                        >
+                          "{item.reason}"
+                        </p>
+                        <p style={{ marginTop: "5px", color: "#60a5fa" }}>
+                          {new Date(item.timestamp).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div
+                    style={{
+                      gridColumn: "1/3",
+                      textAlign: "center",
+                      padding: "40px",
+                    }}
+                  >
+                    No forensic logs recorded.
+                  </div>
+                )}
               </div>
             ) : null}
           </div>
