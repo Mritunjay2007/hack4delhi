@@ -219,6 +219,7 @@ void loop() {
   Serial.print(" My:"); Serial.print(my, 0);
   Serial.print(" Mz:"); Serial.print(mz, 0);
   Serial.print(" Magnetic sensor norm:"); Serial.print(mag_norm, 0);
+  Serial.print(" Accelerometer sensor norm:"); Serial.print(accel_mag, 0);
   Serial.print(" | Tilt:"); Serial.print(tilt_val);
   Serial.print(" | Mic:"); Serial.println(mic_noise_level, 1);
 
