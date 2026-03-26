@@ -102,7 +102,7 @@ app.post('/api/vision', async (req, res) => {
 
         // --- C. GEMINI VLM ANALYSIS ---
         const model = genAI.getGenerativeModel({ 
-            model: "gemini-1.5-flash-8b", 
+            model: "gemini-2.5-flash", 
             generationConfig: { responseMimeType: "application/json" } 
         });
 

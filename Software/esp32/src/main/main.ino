@@ -194,9 +194,9 @@ void loop() {
   doc["tilt_alert"] = (tilt_val == LOW); 
 
   // Calculated Features
-  // doc["accel_mag"] = accel_mag;
+  doc["accel_mag"] = accel_mag;
   doc["accel_roll_rms"] = accel_roll_rms;
-  // doc["mag_norm"] = mag_norm;
+  doc["mag_norm"] = mag_norm;
   doc["mic_level"] = mic_noise_level;
 
   // Constant Environment Data
@@ -218,6 +218,7 @@ void loop() {
   Serial.print(" | Mx:"); Serial.print(mx, 0);
   Serial.print(" My:"); Serial.print(my, 0);
   Serial.print(" Mz:"); Serial.print(mz, 0);
+  Serial.print(" Magnetic sensor norm:"); Serial.print(mag_norm, 0);
   Serial.print(" | Tilt:"); Serial.print(tilt_val);
   Serial.print(" | Mic:"); Serial.println(mic_noise_level, 1);
 
