@@ -77,6 +77,9 @@ class SensorInput(BaseModel):
     latitude: float = 0.0
     longitude: float = 0.0
     mic_level: float = 0.0  # <--- Added for Mic Graph support
+    # Add these lines:
+    accel_mag: float = 0.0
+    mag_norm: float = 0.0
 
 # ===============================
 # 5. API ENDPOINT
@@ -86,8 +89,9 @@ def predict(data: SensorInput):
     try:
         # --- A. CALCULATE PHYSICS ---
         # Calculate Magnitude from X, Y, Z
-        current_accel_mag = np.sqrt(data.accel_x**2 + data.accel_y**2 + data.accel_z**2)
-        current_mag_norm = np.sqrt(data.mag_x**2 + data.mag_y**2 + data.mag_z**2)
+        # Change the physics calculation to:
+        current_accel_mag = data.accel_mag if data.accel_mag else np.sqrt(data.accel_x**2 + data.accel_y**2 + data.accel_z**2)
+        current_mag_norm = data.mag_norm if data.mag_norm else np.sqrt(data.mag_x**2 + data.mag_y**2 + data.mag_z**2)
 
         # Update Buffer for this specific node
         buffer = node_buffers[data.node_id]
@@ -134,7 +138,7 @@ def predict(data: SensorInput):
             print(f"==> TAMPERING DETECTED! Mag: {current_accel_mag:.2f}, Mic: {data.mic_level:.2f}")
 
         # Scenario B: Magnetic Drop (Bolt/Fishplate Removed)
-        elif current_mag_norm < 100: # Adjust this baseline if your sensor reads differently normally
+        elif current_mag_norm < 1400: # Adjust this baseline if your sensor reads differently normally
             is_anomaly = True
             severity = "CRITICAL"
             anomaly_score = 0.90

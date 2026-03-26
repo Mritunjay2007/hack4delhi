@@ -17,7 +17,7 @@ const char* ssid = "Server";
 const char* password = "1@23.qpalzm.";
 // const char* mqtt_server = "test.mosquitto.org";
 const char* mqtt_server = "broker.hivemq.com";
-const char* node_id = "TRACK_SEC_42";
+const char* node_id = "TEST-TRACK-01";
 
 WiFiClient espClient;
 PubSubClient client(espClient);
