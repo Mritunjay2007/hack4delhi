@@ -43,6 +43,22 @@ const sendCriticalAlert = async (data) => {
 
     alertCooldowns.set(nodeId, now);
 
+    // --- NEW: Robust Image Buffer Preparation ---
+    let attachments = [];
+    if (data.image) {
+        // Strip the data URL prefix (handles jpeg, png, etc.)
+        const base64Data = data.image.replace(/^data:image\/(png|jpeg|jpg);base64,/, "");
+        const imageBuffer = Buffer.from(base64Data, 'base64');
+        
+        console.log(`📸 Image Attachment Size: ${(imageBuffer.length / 1024).toFixed(2)} KB`);
+
+        attachments.push({
+            filename: 'evidence.jpg',
+            content: imageBuffer,
+            cid: 'threatimage' // Link this to the <img src="cid:threatimage" />
+        });
+    }
+
     // 3. Compose Email with Image Attachment & AI Reasoning
     const mailOptions = {
         from: `"RailGuard AI System" <${process.env.EMAIL_USER}>`,
@@ -76,13 +92,7 @@ const sendCriticalAlert = async (data) => {
                 <a href="http://localhost:5173" style="display: block; background: #dc2626; color: white; padding: 12px; text-align: center; text-decoration: none; font-weight: bold; border-radius: 6px;">OPEN COMMAND CENTER</a>
             </div>
         `,
-        attachments: data.image ? [{
-        filename: 'evidence.jpg',
-        // This regex ensures we only send the raw data, stripping 'data:image/jpeg;base64,'
-        content: data.image.replace(/^data:image\/(png|jpeg|jpg);base64,/, ""),
-        encoding: 'base64',
-        cid: 'threatimage' // MUST match the src="cid:threatimage" exactly
-    }] : []
+        attachments: attachments
     };
 
     // 4. Send

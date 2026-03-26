@@ -11,9 +11,12 @@
 // ===============================
 // 1. NETWORK CONFIGURATION
 // ===============================
-const char* ssid = "OnePlusNord3";
-const char* password = "hp97omltp";
-const char* mqtt_server = "test.mosquitto.org"; 
+// const char* ssid = "OnePlusNord3";
+// const char* password = "hp97omltp";
+const char* ssid = "Server";
+const char* password = "1@23.qpalzm.";
+// const char* mqtt_server = "test.mosquitto.org";
+const char* mqtt_server = "broker.hivemq.com";
 const char* node_id = "TRACK_SEC_42";
 
 WiFiClient espClient;
@@ -191,9 +194,9 @@ void loop() {
   doc["tilt_alert"] = (tilt_val == LOW); 
 
   // Calculated Features
-  doc["accel_mag"] = accel_mag;
+  // doc["accel_mag"] = accel_mag;
   doc["accel_roll_rms"] = accel_roll_rms;
-  doc["mag_norm"] = mag_norm;
+  // doc["mag_norm"] = mag_norm;
   doc["mic_level"] = mic_noise_level;
 
   // Constant Environment Data
