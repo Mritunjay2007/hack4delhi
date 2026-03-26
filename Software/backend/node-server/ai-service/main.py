@@ -152,24 +152,52 @@ def predict(data: SensorInput):
         baseline = node_baselines[data.node_id]
 
         # Scenario A: High Vibration + High Audio
-        if current_accel_mag > 15.0 and data.mic_level > 5.0:
+        
+        # ==========================================
+        # ENVIRONMENT THRESHOLDS (Toggle these for testing)
+        # ==========================================
+        # Set to True if testing on a desk. Set to False for real track deployment.
+        DESK_TESTING_MODE = True 
+
+        if DESK_TESTING_MODE:
+            VIB_THRESHOLD = 30.0       # Requires a very hard shake/hit to trigger
+            MIC_THRESHOLD = 60.0       # Requires a loud clap or shout (ignores talking)
+            MAG_DROP_RATIO = 0.4       # Requires a 60% drop in magnetic field to trigger
+            ML_THRESHOLD = -0.5        # Highly forgiving ML threshold (ignores slight ambient noise)
+        else:
+            VIB_THRESHOLD = 15.0       # Production Railway Vibration
+            MIC_THRESHOLD = 5.0        # Production Railway Audio
+            MAG_DROP_RATIO = 0.7       # Production 30% Mag Drop
+            ML_THRESHOLD = -0.1        # Strict ML Anomaly Detection
+
+        # --- D. ANOMALY DECISION LOGIC ---
+        is_anomaly = False
+        severity = "LOW"
+        anomaly_score = 0.0
+        reasons = []
+
+        baseline = node_baselines[data.node_id]
+
+        # Scenario A: High Vibration + High Audio
+        if current_accel_mag > VIB_THRESHOLD and data.mic_level > MIC_THRESHOLD:
             is_anomaly = True
             severity = "CRITICAL"
             anomaly_score = 0.95
             reasons.append("Sabotage Pattern: Vibration + Audio Match")
 
-        # Scenario B: RELATIVE Magnetic Drop (30% threshold)
-        elif current_mag_norm < (baseline * 0.7): 
+        # Scenario B: RELATIVE Magnetic Drop
+        elif current_mag_norm < (baseline * MAG_DROP_RATIO): 
             is_anomaly = True
             severity = "CRITICAL"
             anomaly_score = 0.90
             reasons.append(f"Magnetic Drop: {current_mag_norm:.1f} vs Base: {baseline:.1f}")
 
         # Scenario C: High Vibration Only
-        elif current_accel_mag > 15.0:
+        elif current_accel_mag > VIB_THRESHOLD:
             is_anomaly = True
             severity = "WARNING"
-            anomaly_score = min((current_accel_mag - 15.0) / 10.0, 1.0)
+            # Scale score based on how far past the threshold it went
+            anomaly_score = min((current_accel_mag - VIB_THRESHOLD) / 10.0, 1.0)
             reasons.append("Heavy Vibration Detected")
 
         # RULE 2: AI MODEL
@@ -177,11 +205,12 @@ def predict(data: SensorInput):
             df = pd.DataFrame([row])
             X_scaled = scaler.transform(df[FEATURES])
             raw_score = model.decision_function(X_scaled)[0]
-            if raw_score < -0.1:
+            
+            if raw_score < ML_THRESHOLD:
                 is_anomaly = True
                 severity = "MEDIUM"
                 anomaly_score = abs(raw_score)
-                reasons.append("AI Pattern Anomaly")
+                reasons.append(f"AI Pattern Anomaly (Score: {raw_score:.2f})")
 
         return {
             "node_id": data.node_id,
