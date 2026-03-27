@@ -159,6 +159,7 @@ app.post('/api/vision', async (req, res) => {
         }
 
         res.json({ status: "success", ...detectionLog });
+        
 
     } catch (error) {
         // --- UPGRADED ERROR LOGGING ---
