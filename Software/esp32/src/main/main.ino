@@ -11,10 +11,10 @@
 // ===============================
 // 1. NETWORK CONFIGURATION
 // ===============================
-// const char* ssid = "OnePlusNord3";
-// const char* password = "hp97omltp";
-const char* ssid = "Server";
-const char* password = "1@23.qpalzm.";
+const char* ssid = "OnePlusNord3";
+const char* password = "hp97omltp";
+// const char* ssid = "Server";
+// const char* password = "1@23.qpalzm.";
 // const char* mqtt_server = "test.mosquitto.org";
 const char* mqtt_server = "broker.hivemq.com";
 const char* node_id = "TEST-TRACK-01";
