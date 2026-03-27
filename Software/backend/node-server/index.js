@@ -142,21 +142,19 @@ app.post('/api/vision', async (req, res) => {
         io.emit('vision_verdict', detectionLog);
         io.emit('new_detection', detectionLog);
 
-        // --- E. DISPATCH CRITICAL EMAIL ---
         // --- E. DISPATCH FORMAL EMAIL NOTIFICATIONS ---
-        // This will now send a Green mail if secure, or a Red mail if a threat is confirmed
         const alertData = {
             node_id: detectionLog.node_id,
             reason: aiVerdict.reason,
             confidence: aiVerdict.confidence,
-            ...telemetry
+            // Ensure these names match what your MQTT sensors send
+            lat: telemetry?.lat || telemetry?.latitude,
+            lng: telemetry?.lng || telemetry?.longitude
         };
 
         if (aiVerdict.confirmed && aiVerdict.confidence >= 70) {
-            // 1. Send Formal Threat Alert (Red)
             await sendVlmAlert(alertData, true);
         } else {
-            // 2. Send Formal Status Secure Update (Green)
             await sendVlmAlert(alertData, false);
         }
 

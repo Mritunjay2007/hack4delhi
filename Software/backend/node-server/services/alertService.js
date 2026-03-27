@@ -12,33 +12,32 @@ const transporter = nodemailer.createTransport({
 const alertCooldowns = new Map();
 const COOLDOWN_TIME = 60 * 1000;
 
-/**
- * Sends a formal security notification.
- */
 const sendVlmAlert = async (data, isThreat) => {
     if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) return;
 
     const nodeId = data.node_id || "SYSTEM_NODE";
     const now = Date.now();
 
-    // Prevent inbox flooding
     if (alertCooldowns.has(nodeId)) {
         if (now - alertCooldowns.get(nodeId) < COOLDOWN_TIME) return;
     }
     alertCooldowns.set(nodeId, now);
 
-    // --- FORMAL MESSAGE CONFIGURATION ---
+    // Get coordinates (handling multiple possible naming conventions)
+    const lat = data.lat || data.latitude || "28.6427";
+    const lng = data.lng || data.longitude || "77.2207";
+    const mapUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+    const dashboardUrl = process.env.DASHBOARD_URL || "http://localhost:5173";
+
     const config = isThreat ? {
         subject: `URGENT: Security Breach Notification - Node ${nodeId}`,
         header: "SECURITY BREACH DETECTED",
         color: "#b91c1c", // Dark Red
-        detailLabel: "Incident Description",
         status: "IMMEDIATE ATTENTION REQUIRED"
     } : {
         subject: `Status Update: Security Check Clear - Node ${nodeId}`,
         header: "OPERATIONAL STATUS: SECURE",
         color: "#15803d", // Dark Green
-        detailLabel: "Verification Details",
         status: "NO ACTION REQUIRED"
     };
 
@@ -47,31 +46,44 @@ const sendVlmAlert = async (data, isThreat) => {
         to: process.env.ALERT_RECEIVER,
         subject: config.subject,
         html: `
-            <div style="font-family: Arial, sans-serif; color: #334155; max-width: 600px; border: 1px solid #e2e8f0; margin: auto;">
-                <div style="background-color: ${config.color}; color: white; padding: 15px; font-weight: bold; font-size: 18px;">
+            <div style="font-family: Arial, sans-serif; color: #334155; max-width: 600px; border: 1px solid #e2e8f0; margin: auto; border-radius: 8px; overflow: hidden;">
+                <div style="background-color: ${config.color}; color: white; padding: 20px; font-weight: bold; font-size: 18px; text-align: center;">
                     ${config.header}
                 </div>
-                <div style="padding: 20px; line-height: 1.6;">
-                    <p>This automated notification is to inform you of a security assessment conducted at <strong>Node ${nodeId}</strong>.</p>
+                
+                <div style="padding: 25px; line-height: 1.6;">
+                    <p style="margin-top: 0;">This report confirms a monitoring assessment at <b>Node ${nodeId}</b>.</p>
                     
-                    <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+                    <table style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px;">
                         <tr>
-                            <td style="padding: 10px 0; border-bottom: 1px solid #f1f5f9; color: #64748b; width: 40%;">Current Status:</td>
-                            <td style="padding: 10px 0; border-bottom: 1px solid #f1f5f9; font-weight: bold; color: ${config.color};">${config.status}</td>
+                            <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; color: #64748b;">Current Status</td>
+                            <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; font-weight: bold; color: ${config.color}; text-align: right;">${config.status}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 10px 0; border-bottom: 1px solid #f1f5f9; color: #64748b;">Timestamp:</td>
-                            <td style="padding: 10px 0; border-bottom: 1px solid #f1f5f9;">${new Date().toLocaleString()}</td>
+                            <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; color: #64748b;">Event Timestamp</td>
+                            <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; text-align: right;">${new Date().toLocaleString()}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 10px 0; border-bottom: 1px solid #f1f5f9; color: #64748b;">${config.detailLabel}:</td>
-                            <td style="padding: 10px 0; border-bottom: 1px solid #f1f5f9;">${data.reason || "Monitoring check complete."}</td>
+                            <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; color: #64748b;">GPS Coordinates</td>
+                            <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; text-align: right;">${lat}, ${lng}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px; color: #64748b;">Observations</td>
+                            <td style="padding: 10px; text-align: right;">${data.reason || "Routine scan completed."}</td>
                         </tr>
                     </table>
 
-                    <p style="font-size: 12px; color: #94a3b8; margin-top: 30px; border-top: 1px solid #f1f5f9; padding-top: 15px;">
-                        <strong>System Note:</strong> This is a formal report generated by the RailGuard Visual Monitoring System. 
-                        For live telemetry and full diagnostic logs, please access the <a href="http://localhost:5173" style="color: ${config.color}; text-decoration: none; font-weight: bold;">Security Command Center</a>.
+                    <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 2px solid #f1f5f9;">
+                        <a href="${mapUrl}" style="display: inline-block; background-color: #475569; color: white; padding: 12px 20px; text-decoration: none; border-radius: 5px; font-weight: bold; margin: 5px; font-size: 14px;">
+                            📍 VIEW INCIDENT MAP
+                        </a>
+                        <a href="${dashboardUrl}" style="display: inline-block; background-color: ${config.color}; color: white; padding: 12px 20px; text-decoration: none; border-radius: 5px; font-weight: bold; margin: 5px; font-size: 14px;">
+                            🖥️ OPEN DASHBOARD
+                        </a>
+                    </div>
+
+                    <p style="font-size: 11px; color: #94a3b8; margin-top: 30px; text-align: center;">
+                        Confidential Security Report | RailGuard Autonomous Monitoring System
                     </p>
                 </div>
             </div>
@@ -80,10 +92,10 @@ const sendVlmAlert = async (data, isThreat) => {
 
     try {
         await transporter.sendMail(mailOptions);
-        console.log(`[Email-Service] Formal ${isThreat ? 'Alert' : 'Status Update'} sent for Node ${nodeId}`);
+        console.log(`✅ Formal Report Sent: ${isThreat ? 'Threat Alert' : 'Status Clear'}`);
     } catch (error) {
-        console.error('[Email-Service] Failed to send notification:', error.message);
+        console.error('❌ Mail System Error:', error.message);
     }
 };
 
-module.exports = { sendVlmAlert }; // Export the new function name
+module.exports = { sendVlmAlert };
