@@ -1016,7 +1016,7 @@ export default function Dashboard() {
                 <div style={styles.kpiLabel}>System Uptime</div>
                 <div style={{ color: "#10b981" }}>●</div>
               </div>
-              <div style={styles.kpiValue} style={{ color: "#10b981" }}>
+              <div style={{ ...styles.kpiValue, color:  "#10b981" }}>
                 99.98%
               </div>
             </div>
@@ -1031,7 +1031,7 @@ export default function Dashboard() {
                 <div style={styles.kpiLabel}>Active Nodes</div>
                 <div style={{ color: "#3b82f6" }}>●</div>
               </div>
-              <div style={styles.kpiValue} style={{ color: "#60a5fa" }}>
+              <div style={{ ...styles.kpiValue, color: "#60a5fa" }}>
                 {Object.keys(nodes).length}{" "}
                 <span style={{ fontSize: "0.9rem", color: "#64748b" }}>
                   / {Object.keys(nodes).length + 2}
@@ -1049,7 +1049,7 @@ export default function Dashboard() {
                 <div style={styles.kpiLabel}>Max Impact</div>
                 <div style={{ color: "#f59e0b" }}>●</div>
               </div>
-              <div style={styles.kpiValue} style={{ color: "#f8fafc" }}>
+              <div style={{ ...styles.kpiValue, color:  "#f8fafc" }}>
                 {latestEnv.accel_mag ? latestEnv.accel_mag.toFixed(3) : "0.00"}{" "}
                 <span style={{ fontSize: "0.9rem", color: "#64748b" }}>g</span>
               </div>
