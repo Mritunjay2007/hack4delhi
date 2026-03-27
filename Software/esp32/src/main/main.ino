@@ -44,6 +44,13 @@ Adafruit_ADXL345_Unified accel = Adafruit_ADXL345_Unified(12345);
 QMC5883LCompass compass;
 
 // ===============================
+// --- NEW: V2X TRAIN PASSING STATE ---
+// ===============================
+unsigned long lastTrainPassTime = 0;
+bool isTrainPassing = false;
+const unsigned long TRAIN_COOLDOWN_MS = 15000; // Ignore anomalies for 15 seconds
+
+// ===============================
 // 3. I2S CONFIGURATION
 // ===============================
 void initINMP441() {
@@ -71,6 +78,24 @@ void initINMP441() {
   i2s_driver_install(I2S_PORT, &i2s_config, 0, NULL);
   i2s_set_pin(I2S_PORT, &pin_config);
   i2s_zero_dma_buffer(I2S_PORT);
+}
+
+// ===============================
+// --- NEW: MQTT CALLBACK LISTENER ---
+// ===============================
+void mqttCallback(char* topic, byte* payload, unsigned int length) {
+  String msg;
+  for (int i = 0; i < length; i++) {
+    msg += (char)payload[i];
+  }
+  
+  if (String(topic) == "railguard/v2x/train_presence") {
+    if (msg == "APPROACHING") {
+      isTrainPassing = true;
+      lastTrainPassTime = millis();
+      Serial.println("\n🚆 [V2X RADIO] TRAIN DETECTED! Suppressing physical alerts for 15 seconds...\n");
+    }
+  }
 }
 
 // ===============================
@@ -104,6 +129,7 @@ void setup() {
   Serial.println("\n✅ WiFi Connected");
 
   client.setServer(mqtt_server, 1883);
+  client.setCallback(mqttCallback); // <-- ADDED: Attach the listener
   client.setBufferSize(1024);
 }
 
@@ -115,6 +141,8 @@ void reconnect() {
     
     if (client.connect(clientId.c_str())) {
       Serial.println("connected");
+      // <-- ADDED: Subscribe to the train radio frequency
+      client.subscribe("railguard/v2x/train_presence"); 
     } else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
@@ -130,6 +158,14 @@ void reconnect() {
 void loop() {
   if (!client.connected()) reconnect();
   client.loop();
+
+  unsigned long currentTime = millis();
+
+  // --- NEW: Reset the train passing flag after the cooldown period ends ---
+  if (isTrainPassing && (currentTime - lastTrainPassTime > TRAIN_COOLDOWN_MS)) {
+      isTrainPassing = false;
+      Serial.println("\n✅ [V2X RADIO] Train cleared. Resuming normal monitoring.\n");
+  }
 
   // --- 1. READ ACCELEROMETER ---
   sensors_event_t event;
@@ -174,7 +210,8 @@ void loop() {
   StaticJsonDocument<512> doc;
   
   doc["node_id"] = node_id;
-  doc["timestamp"] = millis();
+  doc["timestamp"] = currentTime; // Changed to use the currentTime variable
+  doc["train_passing"] = isTrainPassing; // <-- ADDED: Tell Python the train is here
 
   // GPS (Constant for now)
   doc["latitude"] = 28.6139;
@@ -212,6 +249,9 @@ void loop() {
   client.publish("railguard_live_stream", buffer);
 
   // --- DEBUG PRINT: All Raw Values ---
+  if (isTrainPassing) {
+      Serial.print("🚆 [TRAIN PASSING] ");
+  }
   Serial.print("Ax:"); Serial.print(ax, 2);
   Serial.print(" Ay:"); Serial.print(ay, 2);
   Serial.print(" Az:"); Serial.print(az, 2);

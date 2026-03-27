@@ -80,6 +80,7 @@ class SensorInput(BaseModel):
     mic_level: float = 0.0  
     accel_mag: float = 0.0
     mag_norm: float = 0.0
+    train_passing: bool = False # <--- V2X OVERRIDE FLAG ADDED HERE
 
 # ===============================
 # 5. API ENDPOINT
@@ -142,17 +143,6 @@ def predict(data: SensorInput):
             "PRESSURE": data.pressure
         }
 
-        # --- D. ANOMALY DECISION LOGIC ---
-        is_anomaly = False
-        severity = "LOW"
-        anomaly_score = 0.0
-        reasons = []
-
-        # This is now guaranteed to be a float
-        baseline = node_baselines[data.node_id]
-
-        # Scenario A: High Vibration + High Audio
-        
         # ==========================================
         # ENVIRONMENT THRESHOLDS (Toggle these for testing)
         # ==========================================
@@ -160,7 +150,7 @@ def predict(data: SensorInput):
         DESK_TESTING_MODE = True 
 
         if DESK_TESTING_MODE:
-            VIB_THRESHOLD = 30.0       # Requires a very hard shake/hit to trigger
+            VIB_THRESHOLD = 15.0       # Requires a very hard shake/hit to trigger
             MIC_THRESHOLD = 60.0       # Requires a loud clap or shout (ignores talking)
             MAG_DROP_RATIO = 0.4       # Requires a 60% drop in magnetic field to trigger
             ML_THRESHOLD = -0.5        # Highly forgiving ML threshold (ignores slight ambient noise)
@@ -176,9 +166,26 @@ def predict(data: SensorInput):
         anomaly_score = 0.0
         reasons = []
 
+        # ==========================================
+        # 🚂 V2X OVERRIDE: IGNORE IF TRAIN IS PASSING
+        # ==========================================
+        if getattr(data, 'train_passing', False):
+            return {
+                "node_id": data.node_id,
+                "is_anomaly": False,
+                "severity": "NORMAL (TRAIN PASSING)",
+                "anomaly_score": 0.0,
+                "reasons": ["Analytics Paused: Authorized Train in Sector"],
+                "location": {"lat": data.latitude, "lng": data.longitude},
+                "mic_level": float(data.mic_level),
+                "accel_mag": float(current_accel_mag),
+                "mag_norm": float(current_mag_norm)
+            }
+
+        # This is now guaranteed to be a float because of the calibration block
         baseline = node_baselines[data.node_id]
 
-        # Scenario A: High Vibration + High Audio
+        # Scenario A: High Vibration + High Audio Match
         if current_accel_mag > VIB_THRESHOLD and data.mic_level > MIC_THRESHOLD:
             is_anomaly = True
             severity = "CRITICAL"
