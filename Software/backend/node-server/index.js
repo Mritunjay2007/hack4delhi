@@ -2,19 +2,21 @@ require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const cors = require('cors');
-const bodyParser = require('body-parser'); 
-const axios = require('axios'); 
+const bodyParser = require('body-parser');
+const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 const { initSocket } = require('./socket/socket');
 const { connectMQTT } = require('./mqtt/mqttClient');
 const dataController = require('./controllers/dataController');
-const { sendCriticalAlert } = require('./services/alertService'); 
+const { sendCriticalAlert } = require('./services/alertService');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+// Change this line
+const { sendVlmAlert } = require('./services/alertService');
 
 const app = express();
 app.use(cors());
-app.use(bodyParser.json({ limit: '50mb' })); 
+app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 
 // ==========================================
@@ -57,7 +59,7 @@ app.get('/api/alerts', (req, res) => {
 app.post('/api/alerts/mark-construction', (req, res) => {
     const { id } = req.body;
     const updated = dataController.markConstruction(id);
-    if(updated) {
+    if (updated) {
         io.emit('alert_update', updated);
         res.json({ success: true, alert: updated });
     } else {
@@ -86,24 +88,24 @@ app.post('/api/vision', async (req, res) => {
     }
 
     try {
-        isVisionProcessing = true; 
+        isVisionProcessing = true;
         lastVisionRequestTime = now;
         console.log(`[AI-Service] Received image from ${node_id}. Starting Gemini analysis...`);
 
         // --- B. SAVE EVIDENCE TO DISK ---
         const fileName = `capture_${node_id || 'UNKNOWN'}_${now}.jpg`;
         const filePath = path.join(uploadDir, fileName);
-        
+
         // Strip base64 headers if present
         const base64Data = image_base64.replace(/^data:image\/(png|jpeg|jpg);base64,/, "");
         fs.writeFileSync(filePath, base64Data, 'base64');
-        
+
         const imageUrl = `http://localhost:3000/captures/${fileName}`;
 
         // --- C. GEMINI VLM ANALYSIS ---
-        const model = genAI.getGenerativeModel({ 
-            model: "gemini-2.5-flash", 
-            generationConfig: { responseMimeType: "application/json" } 
+        const model = genAI.getGenerativeModel({
+            model: "gemini-2.5-flash",
+            generationConfig: { responseMimeType: "application/json" }
         });
 
         const prompt = `You are a highly secure railway monitoring AI. Analyze this image of a railway track.
@@ -114,7 +116,7 @@ app.post('/api/vision', async (req, res) => {
         const imagePart = { inlineData: { data: base64Data, mimeType: "image/jpeg" } };
         const result = await model.generateContent([prompt, imagePart]);
         const responseText = await result.response.text();
-        
+
         // Safely parse JSON (strip markdown blocks if Gemini included them)
         const cleanJson = responseText.replace(/```json|```/g, "").trim();
         const aiVerdict = JSON.parse(cleanJson);
@@ -138,17 +140,24 @@ app.post('/api/vision', async (req, res) => {
 
         // Broadcast to Dashboard UI
         io.emit('vision_verdict', detectionLog);
-        io.emit('new_detection', detectionLog); 
+        io.emit('new_detection', detectionLog);
 
         // --- E. DISPATCH CRITICAL EMAIL ---
+        // --- E. DISPATCH FORMAL EMAIL NOTIFICATIONS ---
+        // This will now send a Green mail if secure, or a Red mail if a threat is confirmed
+        const alertData = {
+            node_id: detectionLog.node_id,
+            reason: aiVerdict.reason,
+            confidence: aiVerdict.confidence,
+            ...telemetry
+        };
+
         if (aiVerdict.confirmed && aiVerdict.confidence >= 70) {
-            await sendCriticalAlert({
-                node_id: detectionLog.node_id,
-                image: image_base64,
-                reason: aiVerdict.reason,
-                confidence: aiVerdict.confidence,
-                ...telemetry
-            });
+            // 1. Send Formal Threat Alert (Red)
+            await sendVlmAlert(alertData, true);
+        } else {
+            // 2. Send Formal Status Secure Update (Green)
+            await sendVlmAlert(alertData, false);
         }
 
         res.json({ status: "success", ...detectionLog });
@@ -157,16 +166,16 @@ app.post('/api/vision', async (req, res) => {
         // --- UPGRADED ERROR LOGGING ---
         console.log("\n❌ --- VISION SERVICE CRASH --- ❌");
         console.error("Error Message:", error.message);
-        
+
         if (error.status === 403) console.error("Cause: Invalid Gemini API Key.");
         if (error.message.includes("sendCriticalAlert")) console.error("Cause: Email Service Failed.");
         if (error.message.includes("JSON")) console.error("Cause: Gemini returned weird text instead of JSON.");
-        
+
         console.log("--------------------------------\n");
 
         res.status(500).json({ status: "error", message: error.message });
     } finally {
-        isVisionProcessing = false; 
+        isVisionProcessing = false;
     }
 });
 
@@ -197,15 +206,15 @@ const mqttClient = connectMQTT(async (rawData) => {
                 const lastAlertTime = dashboardAlertCooldowns.get(targetNodeId) || 0;
 
                 if (now - lastAlertTime > DASHBOARD_COOLDOWN_TIME) {
-                    dashboardAlertCooldowns.set(targetNodeId, now); 
+                    dashboardAlertCooldowns.set(targetNodeId, now);
                     console.log(`🚨 Sensor Anomaly triggered at: ${targetNodeId}`);
-                    
-                    const severity = aiAnalysis.severity || "CRITICAL"; 
+
+                    const severity = aiAnalysis.severity || "CRITICAL";
                     const savedAlert = dataController.addAlert(targetNodeId, severity);
-                    
+
                     io.emit('new_alert', {
-                        ...savedAlert,                 
-                        lat: rawData.lat || rawData.latitude || 28.6427, 
+                        ...savedAlert,
+                        lat: rawData.lat || rawData.latitude || 28.6427,
                         lng: rawData.lng || rawData.longitude || 77.2207,
                         nodeId: targetNodeId,
                         severity: severity,
