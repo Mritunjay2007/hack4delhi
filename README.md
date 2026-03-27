@@ -63,32 +63,32 @@ graph LR
     C -->|API| E[Gemini 2.5 VLM]
     E -->|Validation| C
     C -->|Socket.io| F[React Dashboard]
-````
+```
 
 > **Flow:** Track Sensors & V2X Train Signals → MQTT Broker → Node Server → Physics + ML Inference Engine → Wake Camera → VLM Validation → Dashboard UI
 
 ## 📸 Prototype in Action
 
-\<table\>
-\<tr\>
-\<td align="center"\>\<strong\>Hardware: ESP32 Edge Node\</strong\>\</td\>
-\<td align="center"\>\<strong\>Hardware: Field Deployment\</strong\>\</td\>
-\<td align="center"\>\<strong\>Hardware: Prototype\</strong\>\</td\>
-\</tr\>
-\<tr\>
-\<td\>\<img src="Documents/prototype/hardware\_circuit.jpeg" alt="ESP32 Breadboard Circuit" width="400"/\>\</td\>
-\<td\>\<img src="Documents/prototype/hardware\_track.jpeg" alt="Node Deployed on Tracks" width="400"/\>\</td\>
-\<td\>\<img src="Documents/prototype/prototype.jpeg" alt="Prototype" width="400"/\>\</td\>
-\</tr\>
-\<tr\>
-\<td align="center"\>\<strong\>Software: Live Telemetry Dashboard\</strong\>\</td\>
-\<td align="center"\>\<strong\>Software: VLM Sabotage Detection\</strong\>\</td\>
-\</tr\>
-\<tr\>
-\<td\>\<img src="Documents/prototype/dashboard\_live.jpeg" alt="Dashboard showing live sensor telemetry" width="400"/\>\</td\>
-\<td\>\<img src="Documents/prototype/dashboard\_alert.jpeg" alt="Dashboard showing camera visual alert" width="400"/\>\</td\>
-\</tr\>
-\</table\>
+<table>
+<tr>
+<td align="center"><strong>Hardware: ESP32 Edge Node</strong></td>
+<td align="center"><strong>Hardware: Field Deployment</strong></td>
+<td align="center"><strong>Hardware: Prototype</strong></td>
+</tr>
+<tr>
+<td><img src="Documents/prototype/hardware_circuit.jpeg" alt="ESP32 Breadboard Circuit" width="400"\></td>
+<td><img src="Documents/prototype/hardware_track.jpeg" alt="Node Deployed on Tracks" width="400"\></td>
+<td><img src="Documents/prototype/prototype.jpeg" alt="Prototype" width="400"\></td>
+</tr>
+<tr>
+<td align="center"\><strong>Software: Live Telemetry Dashboard</strong></td>
+<td align="center"\><strong>Software: VLM Sabotage Detection</strong></td>
+</tr>
+<tr>
+<td><img src="Documents/prototype/dashboard_live.jpeg" alt="Dashboard showing live sensor telemetry" width="400"/></td>
+<td><img src="Documents/prototype/dashboard_alert.jpeg" alt="Dashboard showing camera visual alert" width="400"/></td>
+</tr>
+</table>
 
 ## 🛠 Tech Stack
 
@@ -187,13 +187,11 @@ npm run dev
 4.  **Hardware Test:** If using the physical ESP32 Track Node, switch to **LIVE SENSORS** mode. Allow 20 readings for the magnetic auto-calibration to complete, then shake the sensor violently to trigger the edge-to-cloud alert pipeline.
 5.  **V2X Train Test:** Power on your secondary Train Impersonator node (Pico W or ESP32). Press the physical `BOOT` button to broadcast the train's approach. The Python server will automatically pause anomaly detection for 15 seconds, outputting `"severity": "NORMAL (TRAIN PASSING)"`.
 
-\<div align="center"\>
-\<b\>Built for Hack4Delhi / Railway Safety Projects 🇮🇳\</b\>
+<div align="center">
+<b>Built for Hack4Delhi / Railway Safety Projects 🇮🇳</b>
 
 <br>
 
-\<sub\>RDSO Compliant Logic • Indigenous Technology • Make in India\</sub\>
+<sub>RDSO Compliant Logic • Indigenous Technology • Make in India</sub>
 
-\</div\>
-
-```
+</div>
